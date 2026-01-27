@@ -27,59 +27,56 @@ map.on('load', async () => {
 
     // --- 各レイヤーのベース高さを 0.1m ずつずらして重なりを解消 (Z-fighting防止) ---
 
-    // 1. 公園レイヤー（最下層: 30.0m）
-    map.addLayer({
-        'id': 'floating-parks',
-        'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
-        'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
-        'paint': {
-            'fill-extrusion-color': '#a3ad85', 
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
-            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
-            'fill-extrusion-opacity': 0.1 // 少し視認性を上げるために 0.05 -> 0.1 へ
-        }
-    });
-
-    // 2. 川・水面レイヤー（30.1m）
-    map.addLayer({
-        'id': 'floating-water',
-        'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
-        'paint': {
-            'fill-extrusion-color': '#b0c4de', 
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
-            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-            'fill-extrusion-opacity': 0.05 // 完全透明だと存在が消えるため、極薄く設定
-        }
-    });
-
- // 3. 道路レイヤー（30.1m：建物の下に敷く）
+// 1. 公園レイヤー（最下層: 30.0m）
 map.addLayer({
-    'id': 'floating-roads',
-    'source': 'composite', 'source-layer': 'road', 'type': 'fill-extrusion',
+    'id': 'floating-parks',
+    'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
+    'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
     'paint': {
-        // 建物より少し暗めのグレーにして差をつける
-        'fill-extrusion-color': '#888888',
-        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
-        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-        // 道路はあくまで「ガイド」なので薄く 0.1
+        'fill-extrusion-color': '#a3ad85', 
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
+        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
         'fill-extrusion-opacity': 0.1
     }
 });
 
-// 4. 建物レイヤー（30.2m：最上層）
+// 2. 川・水面レイヤー（復活：30.1m）
+map.addLayer({
+    'id': 'floating-water',
+    'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
+    'paint': {
+        // 落ち着いた水色
+        'fill-extrusion-color': '#b0c4de', 
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
+        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
+        // 下の地下鉄が見えるよう極薄く設定
+        'fill-extrusion-opacity': 0.05 
+    }
+});
+
+// 3. 道路レイヤー（30.2m：主要幹線道路のみ）
+map.addLayer({
+    'id': 'floating-roads',
+    'source': 'composite', 'source-layer': 'road', 'type': 'fill-extrusion',
+    'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary'], true, false],
+    'paint': {
+        'fill-extrusion-color': '#888888',
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
+        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.25,
+        'fill-extrusion-opacity': 0.1
+    }
+});
+
+// 4. 建物レイヤー（最上層: 30.3m〜）
 map.addLayer({
     'id': 'floating-buildings',
     'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
-    // フィルターを「高さ10m以上」から「高さ0m以上（すべての建物）」に変更してテスト
-    'filter': ['>=', ['get', 'height'], 0], 
+    'filter': ['>=', ['get', 'height'], 3], 
     'paint': {
-        // 道路や背景から浮き立たせるため、白 (#ffffff) に変更
         'fill-extrusion-color': '#ffffff',
-        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.2, 
-        // 高さデータがない建物も考慮し、最低10mの厚みを持たせる補正
-        'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 10], CONFIG.CITY.FLOAT_HEIGHT + 0.2],
-        // 視認性向上のため、不透明度を 0.4 から 0.6 へアップ
-        'fill-extrusion-opacity': 0.6
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
+        'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 5], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
+        'fill-extrusion-opacity': 0.5
     }
 });
     
@@ -243,6 +240,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
