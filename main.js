@@ -75,16 +75,27 @@ map.addLayer({
     }
 });
 
-// 4. 建物レイヤー（不透明な白：維持）
+// 4. 建物レイヤー（地下街などの低い構造物を除外・透過）
 map.addLayer({
     'id': 'floating-buildings',
     'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
-    'filter': ['>=', ['get', 'height'], 3], 
+    // フィルターを強化：高さ5m（約1.5階分）未満の構造物は表示しない
+    // これにより、多くの地下街データや平坦な構造物が除外されます
+    'filter': ['>=', ['get', 'height'], 5], 
     'paint': {
-        'fill-extrusion-color': '#ffffff', //
+        'fill-extrusion-color': '#ffffff',
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
-        'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT + 0.3], //
-        'fill-extrusion-opacity': 1.0 //
+        'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
+        
+        // 【透過補正】高さに応じて透明度を変化させる
+        // 5m〜12mの建物は徐々に不透明にし、12m以上の建物だけをクッキリ見せる
+        'fill-extrusion-opacity': [
+            'interpolate',
+            ['linear'],
+            ['get', 'height'],
+            5, 0,     // 5mちょうどは透明
+            12, 1.0   // 12m以上で完全な不透明（白い建物）
+        ]
     }
 });
     
@@ -260,6 +271,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
