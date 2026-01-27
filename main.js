@@ -236,17 +236,21 @@ function animate() {
     const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
     clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
     
-    const z = map.getZoom();
+ const z = map.getZoom();
 
-    // ★ ズームに応じたサイズ調整の変更
-    // 基準を 14.5 から 16.0 に引き上げ（より早い段階＝ズームが少し引いただけで大きくなり始める）
-    // Math.min(..., 15.0) で、元のサイズの最大15倍で大きさをストップさせる
+    // 平面方向の拡大率（最大15倍）
     const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
     
-    // 高さ（厚み）のスケールも同様に調整
-    const hScale = Math.min(4.0, Math.pow(1.5, Math.max(0, 16.0 - z))); 
+    // ★ 高方向の拡大率を修正
+    // 平面と同じ scale を使うことで、ズームアウトしても「かまぼこ板」にならず、
+    // 背の高いプロポーションを維持します
+    const hScale = scale; 
 
-    const L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
+    // 電車のサイズ計算
+    const L = CONFIG.TRAIN.LENGTH * scale;
+    const W = CONFIG.TRAIN.WIDTH * scale;
+    // 高さは CONFIG.TRAIN.HEIGHT (25) に hScale を掛け合わせる
+    const H = CONFIG.TRAIN.HEIGHT * hScale;
 
     const feats = [];
     
@@ -276,6 +280,7 @@ function animate() {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
