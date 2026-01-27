@@ -64,17 +64,19 @@ map.addLayer({
     }
 });
 
-// 4. 建物レイヤー（高さを元に戻し、白を維持）
+// 4. 建物レイヤー（完全に不透明な白い都市）
 map.addLayer({
     'id': 'floating-buildings',
     'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
     'filter': ['>=', ['get', 'height'], 3], 
     'paint': {
-        'fill-extrusion-color': '#ffffff', // 元の白い建物
+        // 色は純白を維持
+        'fill-extrusion-color': '#ffffff',
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
-        // ★圧縮を解除。元の高さに戻しました
+        // 高さを元のスケールに設定
         'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
-        'fill-extrusion-opacity': 0.05 // 地下鉄が見えるよう、建物は空気のように薄く
+        // 透明度を 0（不透明）にするため、値を 1.0 に設定
+        'fill-extrusion-opacity': 1.0 
     }
 });
     
@@ -238,6 +240,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
