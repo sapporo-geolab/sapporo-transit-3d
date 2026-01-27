@@ -27,7 +27,7 @@ map.on('load', async () => {
 
     // --- 各レイヤーのベース高さを 0.1m ずつずらして重なりを解消 (Z-fighting防止) ---
 
-// 1. 公園レイヤー（色をはっきりさせるため不透明度を 0.4 にアップ）
+// 1. 公園レイヤー（色をはっきり：不透明度 0.6）
 map.addLayer({
     'id': 'floating-parks',
     'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
@@ -36,11 +36,11 @@ map.addLayer({
         'fill-extrusion-color': '#a3ad85', 
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
         'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
-        'fill-extrusion-opacity': 0.4 // 0.2 -> 0.4
+        'fill-extrusion-opacity': 0.6 // 色がしっかり見えるようにアップ
     }
 });
 
-// 2. 川・水面レイヤー（色をはっきりさせるため不透明度を 0.3 にアップ）
+// 2. 川・水面レイヤー（色をはっきり：不透明度 0.5）
 map.addLayer({
     'id': 'floating-water',
     'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
@@ -48,38 +48,33 @@ map.addLayer({
         'fill-extrusion-color': '#b0c4de', 
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
         'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-        'fill-extrusion-opacity': 0.3 // 0.15 -> 0.3
+        'fill-extrusion-opacity': 0.5 // 存在感が出るようにアップ
     }
 });
 
-// 3. 道路レイヤー（より「オレンジ」に見える色と設定に変更）
+// 3. 道路レイヤー（★typeを 'line' に変更：地上を走るオレンジの網目）
 map.addLayer({
     'id': 'floating-roads',
-    'source': 'composite', 'source-layer': 'road', 'type': 'fill-extrusion',
-    // フィルターを広げて、街中の一般的な道 (street, tertiary) も表示されるようにします
+    'source': 'composite', 'source-layer': 'road', 'type': 'line', // 'fill-extrusion' から変更
     'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'street'], true, false],
     'paint': {
-        // 彩度を上げたオレンジ (#ffa500) に変更
-        'fill-extrusion-color': '#ffa500', 
-        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.25,
-        // 不透明度を 0.4 まで引き上げ。これでオレンジがはっきり見えます
-        'fill-extrusion-opacity': 0.4 
+        'line-color': '#ff4500', // はっきりしたオレンジ（朱色に近いオレンジ）
+        'line-width': 1.5,
+        'line-opacity': 0.8 // 地面の黒に負けないように強めに設定
     }
 });
 
-// 4. 建物レイヤー（地下鉄を見せるため、さらに透明に、さらに低く）
+// 4. 建物レイヤー（高さを元に戻し、白を維持）
 map.addLayer({
     'id': 'floating-buildings',
     'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
     'filter': ['>=', ['get', 'height'], 3], 
     'paint': {
-        'fill-extrusion-color': '#ffffff',
+        'fill-extrusion-color': '#ffffff', // 元の白い建物
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
-        // 高さを本来の 10% (0.1) まで圧縮。壁を低くして地下鉄を見えやすくします
-        'fill-extrusion-height': ["+", ["*", ["coalesce", ["get", "height"], 5], 0.1], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
-        // 極限まで薄く (0.05) します
-        'fill-extrusion-opacity': 0.05 
+        // ★圧縮を解除。元の高さに戻しました
+        'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
+        'fill-extrusion-opacity': 0.05 // 地下鉄が見えるよう、建物は空気のように薄く
     }
 });
     
@@ -243,6 +238,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
