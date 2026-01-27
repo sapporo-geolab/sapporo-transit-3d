@@ -142,28 +142,45 @@ async function initSubway() {
             return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
         }
 
-        function getHybridPos(p1, p2, pct) {
-            const lerpLng = p1.lon + (p2.lon - p1.lon) * pct, lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
-            const pt = turf.point([lerpLng, lerpLat]), straightAngle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
-            const distFromStart = turf.distance(turf.point([p1.lon, p1.lat]), pt);
-            const totalDist = turf.distance(turf.point([p1.lon, p1.lat]), turf.point([p2.lon, p2.lat]));
-            if (isCriticalSection(p1.name, p2.name) || distFromStart < 0.002 || (totalDist - distFromStart) < 0.002) return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
+function getHybridPos(p1, p2, pct) {
+    const lerpLng = p1.lon + (p2.lon - p1.lon) * pct;
+    const lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
+    const pt = turf.point([lerpLng, lerpLat]);
+    
+    // 駅間を結ぶ直線の角度を計算
+    const straightAngle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
+    
+    const distFromStart = turf.distance(turf.point([p1.lon, p1.lat]), pt);
+    const totalDist = turf.distance(turf.point([p1.lon, p1.lat]), turf.point([p2.lon, p2.lat]));
 
-            let closestPt = pt, min_dist = Infinity, bestFeature = null;
-            subGeo.features.forEach(f => {
-                try {
-                    const snapped = turf.nearestPointOnLine(f, pt);
-                    if (snapped.properties.dist < min_dist) { min_dist = snapped.properties.dist; closestPt = snapped; bestFeature = f; }
-                } catch(e) {}
-            });
+    // ★ 補正ロジック: 指定された区間、または駅の前後3m (0.003km) は直線移動にする
+    if (isCriticalSection(p1.name, p2.name) || distFromStart < 0.003 || (totalDist - distFromStart) < 0.003) {
+        return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
+    }
 
-            if (bestFeature && min_dist < 0.5) { 
-                const nPct = Math.min(1.0, pct + 0.005);
-                const nSnapped = turf.nearestPointOnLine(bestFeature, turf.point([p1.lon + (p2.lon - p1.lon) * nPct, p1.lat + (p2.lat - p1.lat) * nPct]));
-                return { lng: closestPt.geometry.coordinates[0], lat: closestPt.geometry.coordinates[1], angle: (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180) };
+    let closestPt = pt, min_dist = Infinity, bestFeature = null;
+    subGeo.features.forEach(f => {
+        try {
+            const snapped = turf.nearestPointOnLine(f, pt);
+            if (snapped.properties.dist < min_dist) { 
+                min_dist = snapped.properties.dist; 
+                closestPt = snapped; 
+                bestFeature = f; 
             }
-            return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
-        }
+        } catch(e) {}
+    });
+
+    if (bestFeature && min_dist < 0.5) { 
+        const nPct = Math.min(1.0, pct + 0.005);
+        const nSnapped = turf.nearestPointOnLine(bestFeature, turf.point([p1.lon + (p2.lon - p1.lon) * nPct, p1.lat + (p2.lat - p1.lat) * nPct]));
+        return { 
+            lng: closestPt.geometry.coordinates[0], 
+            lat: closestPt.geometry.coordinates[1], 
+            angle: (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180) 
+        };
+    }
+    return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
+}
 
         function animate() {
             const now = new Date();
@@ -200,6 +217,7 @@ async function initSubway() {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
