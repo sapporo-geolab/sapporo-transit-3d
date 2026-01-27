@@ -41,17 +41,20 @@ map.addLayer({
     }
 });
 
-    // 2. 川・水面レイヤー（25m）
-    map.addLayer({
-        'id': 'floating-water',
-        'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
-        'paint': {
-            'fill-extrusion-color': '#1a3a4a', // 深い青
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT - 1,
-            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT,
-            'fill-extrusion-opacity': 0.8
-        }
-    });
+  // 2. 川・水面レイヤー（25m）
+map.addLayer({
+    'id': 'floating-water',
+    'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
+    'paint': {
+        // 濃い青 (#1a3a4a) から、明るい背景に馴染む落ち着いた水色 (#b0c4de) へ変更
+        'fill-extrusion-color': '#b0c4de', 
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT - 1,
+        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT,
+        // 下の電車が見えるよう、不透明度を 0 に設定（完全に透明）
+        // ※「色のついた薄い膜」のように見せたい場合は、0.05 程度に設定してみてください
+        'fill-extrusion-opacity': 0 
+    }
+});
 
 // 3. 建物レイヤー（25m）
 map.addLayer({
@@ -197,5 +200,6 @@ async function initSubway() {
     } catch (e) { console.error(e); }
 
 }
+
 
 
