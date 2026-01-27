@@ -52,15 +52,26 @@ map.addLayer({
     }
 });
 
-// 3. 道路レイヤー（★typeを 'line' に変更：地上を走るオレンジの網目）
+// 3. 道路レイヤー（幅に強弱をつけ、色を薄くした設定）
 map.addLayer({
     'id': 'floating-roads',
-    'source': 'composite', 'source-layer': 'road', 'type': 'line', // 'fill-extrusion' から変更
+    'source': 'composite', 'source-layer': 'road', 'type': 'line',
     'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'street'], true, false],
     'paint': {
-        'line-color': '#ff4500', // はっきりしたオレンジ（朱色に近いオレンジ）
-        'line-width': 1.5,
-        'line-opacity': 0.8 // 地面の黒に負けないように強めに設定
+        // 色を濃い朱色から、淡いパステルオレンジ (#ffcc80) に変更
+        'line-color': '#ffcc80',
+        
+        // 道路の種別によって太さを分ける設定
+        'line-width': [
+            'match',
+            ['get', 'class'],
+            ['motorway', 'trunk', 'primary'], 6,    // 太い道路（高速・国道など）
+            ['secondary', 'tertiary'], 3,          // 中間の道路
+            1.5                                   // 細い道路（一般道：street）
+        ],
+        
+        // 背景の黒に馴染みつつ、存在感が出るように透明度を調整
+        'line-opacity': 0.7 
     }
 });
 
@@ -240,6 +251,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
