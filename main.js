@@ -75,26 +75,23 @@ map.addLayer({
     }
 });
 
-// 4. 建物レイヤー（修正版：データ欠損対策と地下街透過の両立）
+// 4. 建物レイヤー（35m以下の低い構造物をカットし、不透明な白に戻す）
 map.addLayer({
     'id': 'floating-buildings',
     'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
-    // 高さデータがない場合は「10m」と仮定して、5m以上の判定をパスさせます
-    'filter': ['>=', ['coalesce', ['get', 'height'], 10], 5], 
+    // 【フィルター】実際の高さが 4.7m を超える建物のみを表示
+    // これにより、30.3m〜35.0m の範囲に収まる地下街入口や低い構造物が消えます
+    'filter': ['>', ['number', ['get', 'height'], 0], 4.7], 
     'paint': {
+        // 色は純白
         'fill-extrusion-color': '#ffffff',
-        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
-        // 高さが不明な建物は一律 15m の高さで描画します
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, // 30.3m
+        
+        // 【高さ】データがない場合は一律 15m (30.3 + 15 = 45.3m) として描画
         'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 15], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
         
-        // 透明度の計算にも coalesce を使い、データがない建物が消えるのを防ぎます
-        'fill-extrusion-opacity': [
-            'interpolate',
-            ['linear'],
-            ['coalesce', ['get', 'height'], 10],
-            5, 0.2,   // 低い建物（地下街疑い）は 0.2 (20%) の薄さに
-            15, 1.0   // 15m以上のしっかりしたビルは 1.0 (100%) の白に
-        ]
+        // 【不透明度】透けない設定（1.0）に戻す
+        'fill-extrusion-opacity': 1.0 
     }
 });
     
@@ -270,6 +267,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
