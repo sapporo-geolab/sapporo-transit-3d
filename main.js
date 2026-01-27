@@ -52,31 +52,37 @@ map.on('load', async () => {
         }
     });
 
-    // 3. 道路レイヤー（中間層: 30.2m）
-    map.addLayer({
-        'id': 'floating-roads',
-        'source': 'composite', 'source-layer': 'road', 'type': 'fill-extrusion',
-        'paint': {
-            'fill-extrusion-color': '#d1d1d1',
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.3,
-            'fill-extrusion-opacity': 0.2 // 道路の網目が見えるよう調整
-        }
-    });
+ // 3. 道路レイヤー（30.1m：建物の下に敷く）
+map.addLayer({
+    'id': 'floating-roads',
+    'source': 'composite', 'source-layer': 'road', 'type': 'fill-extrusion',
+    'paint': {
+        // 建物より少し暗めのグレーにして差をつける
+        'fill-extrusion-color': '#888888',
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
+        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
+        // 道路はあくまで「ガイド」なので薄く 0.1
+        'fill-extrusion-opacity': 0.1
+    }
+});
 
-    // 4. 建物レイヤー（最上層: 30.3m〜）
-    map.addLayer({
-        'id': 'floating-buildings',
-        'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
-        'filter': ['>', ['get', 'height'], 10], 
-        'paint': {
-            'fill-extrusion-color': '#d1d1d1',
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
-            'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
-            'fill-extrusion-opacity': CONFIG.CITY.OPACITY // 0.4
-        }
-    });
-
+// 4. 建物レイヤー（30.2m：最上層）
+map.addLayer({
+    'id': 'floating-buildings',
+    'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
+    // フィルターを「高さ10m以上」から「高さ0m以上（すべての建物）」に変更してテスト
+    'filter': ['>=', ['get', 'height'], 0], 
+    'paint': {
+        // 道路や背景から浮き立たせるため、白 (#ffffff) に変更
+        'fill-extrusion-color': '#ffffff',
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.2, 
+        // 高さデータがない建物も考慮し、最低10mの厚みを持たせる補正
+        'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 10], CONFIG.CITY.FLOAT_HEIGHT + 0.2],
+        // 視認性向上のため、不透明度を 0.4 から 0.6 へアップ
+        'fill-extrusion-opacity': 0.6
+    }
+});
+    
     await initSubway();
 });
 
@@ -237,6 +243,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
