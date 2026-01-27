@@ -222,25 +222,34 @@ function getHybridPos(p1, p2, pct) {
     // それ以外（駅間）は通常の線路スナップ
     return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
 }
-        function animate() {
-        const now = new Date();
         
-        // 日付の表示 (例: 2026.01.27 Tue)
-        if (dateEl) {
-            const y = now.getFullYear();
-            const m = String(now.getMonth() + 1).padStart(2, '0');
-            const d = String(now.getDate()).padStart(2, '0');
-            const w = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
-            dateEl.innerText = `${y}.${m}.${d} ${w}`;
-        }
+function animate() {
+    const now = new Date();
+    // 日付の表示ロジック（そのまま維持）
+    const dateEl = document.getElementById('date'); 
+    if (dateEl) {
+        const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
+        const w = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
+        dateEl.innerText = `${y}.${m}.${d} ${w}`;
+    }
 
-        const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
-        clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
-            
-            const z = map.getZoom(), scale = Math.pow(3.0, Math.max(0, 14.5 - z)); 
-            const L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale, hScale = Math.pow(1.5, Math.max(0, 14.5 - z));
+    const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
+    clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
+    
+    const z = map.getZoom();
 
-            const feats = [];
+    // ★ ズームに応じたサイズ調整の変更
+    // 基準を 14.5 から 16.0 に引き上げ（より早い段階＝ズームが少し引いただけで大きくなり始める）
+    // Math.min(..., 15.0) で、元のサイズの最大15倍で大きさをストップさせる
+    const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
+    
+    // 高さ（厚み）のスケールも同様に調整
+    const hScale = Math.min(4.0, Math.pow(1.5, Math.max(0, 16.0 - z))); 
+
+    const L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
+
+    const feats = [];
+    
             activeTrips.forEach((stops, tid) => {
                 const rid = tripToRoute.get(tid), info = routeData.get(rid);
                 if (!info) return;
@@ -267,6 +276,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
