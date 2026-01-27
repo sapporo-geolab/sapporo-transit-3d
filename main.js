@@ -292,3 +292,6 @@ function animate() {
     trainCountEl.innerText = `${feats.length} trains running`;
     requestAnimationFrame(animate);
 }
+animate();
+    } catch (e) { console.error(e); }
+} // ← ここを閉じ忘れていたのがエラーの原因でした
