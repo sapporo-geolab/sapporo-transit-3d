@@ -1,7 +1,7 @@
 const CONFIG = {
     MAP: {
         CENTER: [141.3508, 43.0610],
-        ZOOM: 14.5,
+        ZOOM: 16.5,
         PITCH: 60,
         BEARING: -15
     },
@@ -16,4 +16,5 @@ const CONFIG = {
         FLOAT_HEIGHT: 30,
         OPACITY: 0.4      // ★建物の透明度（0.2から0.4へ変更。形が見えやすくなります）
     }
+
 };
