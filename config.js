@@ -6,9 +6,9 @@ const CONFIG = {
         BEARING: -15
     },
     TRAIN: {
-        LENGTH: 0.00015, 
-        WIDTH: 0.00007,
-        HEIGHT: 15,
+        LENGTH: 0.00012, 
+        WIDTH: 0.00008,
+        HEIGHT: 13,
         OPACITY: 0.7,     // 電車の透明度
         STOP_DURATION: 20
     },
@@ -18,5 +18,6 @@ const CONFIG = {
     }
 
 };
+
 
 
