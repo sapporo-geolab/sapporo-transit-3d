@@ -26,18 +26,20 @@ map.on('load', async () => {
         }
     });
 
-    // 1. 公園レイヤー（25m）
-    map.addLayer({
-        'id': 'floating-parks',
-        'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
-        'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
-        'paint': {
-            'fill-extrusion-color': '#2e4d2e', // 暗い背景に映える濃い緑
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT - 1,
-            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT,
-            'fill-extrusion-opacity': 0.8
-        }
-    });
+// 1. 公園レイヤー（25m）
+map.addLayer({
+    'id': 'floating-parks',
+    'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
+    'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
+    'paint': {
+        // 色を濃い緑（#2e4d2e）から、明るく淡い緑（#90ee90）へ変更
+        'fill-extrusion-color': '#90ee90', 
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT - 1,
+        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT,
+        // 不透明度を 0.8 から 0.3（より透き通る設定）へ変更
+        'fill-extrusion-opacity': 0.3 
+    }
+});
 
     // 2. 川・水面レイヤー（25m）
     map.addLayer({
@@ -191,4 +193,5 @@ async function initSubway() {
         }
         animate();
     } catch (e) { console.error(e); }
+
 }
