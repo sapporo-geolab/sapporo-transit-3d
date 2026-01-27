@@ -76,7 +76,8 @@ map.addLayer({
         'fill-extrusion-color': '#ffffff',
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
         'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 5], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
-        'fill-extrusion-opacity': 0.5
+        // 透明度を 0.5 から 0.2 へ大幅に下げて、地下鉄が透けて見えるように調整
+        'fill-extrusion-opacity': 0.2 
     }
 });
     
@@ -240,6 +241,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
