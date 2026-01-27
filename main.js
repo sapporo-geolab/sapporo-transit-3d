@@ -53,18 +53,20 @@ map.addLayer({
         }
     });
 
-    // 3. 建物レイヤー（25m）
-    map.addLayer({
-        'id': 'floating-buildings',
-        'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
-        'filter': ['>', ['get', 'height'], 10], 
-        'paint': {
-            'fill-extrusion-color': '#aaaaaa',
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
-            'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT],
-            'fill-extrusion-opacity': 0.9
-        }
-    });
+// 3. 建物レイヤー（25m）
+map.addLayer({
+    'id': 'floating-buildings',
+    'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
+    'filter': ['>', ['get', 'height'], 10], 
+    'paint': {
+        // 重たいグレー（#aaaaaa）から、明るい背景に馴染む薄いグレー（#d1d1d1）へ変更
+        'fill-extrusion-color': '#d1d1d1',
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
+        'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT],
+        // 透明度は config.js の CONFIG.CITY.OPACITY (0.4) を引き継ぎます
+        'fill-extrusion-opacity': CONFIG.CITY.OPACITY
+    }
+});
 
     await initSubway();
 });
@@ -195,4 +197,5 @@ async function initSubway() {
     } catch (e) { console.error(e); }
 
 }
+
 
