@@ -1,7 +1,7 @@
 const CONFIG = {
     MAP: {
         CENTER: [141.3508, 43.0610],
-        ZOOM: 16.5,
+        ZOOM: 15.5,
         PITCH: 60,
         BEARING: -15
     },
@@ -18,3 +18,4 @@ const CONFIG = {
     }
 
 };
+
