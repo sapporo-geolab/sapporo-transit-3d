@@ -92,6 +92,8 @@ map.addLayer({
 });
 
 async function initSubway() {
+    // 日付を表示する要素を追加で取得
+    const dateEl = document.getElementById('date'); 
     const clockEl = document.getElementById('clock');
     const trainCountEl = document.getElementById('train-count');
 
@@ -214,9 +216,19 @@ function getHybridPos(p1, p2, pct) {
     return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
 }
         function animate() {
-            const now = new Date();
-            const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
-            clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
+        const now = new Date();
+        
+        // 日付の表示 (例: 2026.01.27 Tue)
+        if (dateEl) {
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            const w = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
+            dateEl.innerText = `${y}.${m}.${d} ${w}`;
+        }
+
+        const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
+        clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
             
             const z = map.getZoom(), scale = Math.pow(3.0, Math.max(0, 14.5 - z)); 
             const L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale, hScale = Math.pow(1.5, Math.max(0, 14.5 - z));
@@ -248,6 +260,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
