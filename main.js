@@ -146,18 +146,12 @@ function getHybridPos(p1, p2, pct) {
     const lerpLng = p1.lon + (p2.lon - p1.lon) * pct;
     const lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
     const pt = turf.point([lerpLng, lerpLat]);
-    
-    // 駅間を結ぶ直線の角度を計算
     const straightAngle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
     
     const distFromStart = turf.distance(turf.point([p1.lon, p1.lat]), pt);
     const totalDist = turf.distance(turf.point([p1.lon, p1.lat]), turf.point([p2.lon, p2.lat]));
 
-    // ★ 補正ロジック: 指定された区間、または駅の前後3m (0.003km) は直線移動にする
-    if (isCriticalSection(p1.name, p2.name) || distFromStart < 0.003 || (totalDist - distFromStart) < 0.003) {
-        return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
-    }
-
+    // --- 1. まず線路上の「スナップ座標」と「角度」を取得する ---
     let closestPt = pt, min_dist = Infinity, bestFeature = null;
     subGeo.features.forEach(f => {
         try {
@@ -170,18 +164,38 @@ function getHybridPos(p1, p2, pct) {
         } catch(e) {}
     });
 
+    let snappedLng = closestPt.geometry.coordinates[0];
+    let snappedLat = closestPt.geometry.coordinates[1];
+    let snappedAngle = straightAngle; // デフォルト
+
     if (bestFeature && min_dist < 0.5) { 
         const nPct = Math.min(1.0, pct + 0.005);
         const nSnapped = turf.nearestPointOnLine(bestFeature, turf.point([p1.lon + (p2.lon - p1.lon) * nPct, p1.lat + (p2.lat - p1.lat) * nPct]));
-        return { 
-            lng: closestPt.geometry.coordinates[0], 
-            lat: closestPt.geometry.coordinates[1], 
-            angle: (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180) 
+        snappedAngle = (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180);
+    }
+
+    // --- 2. 駅付近での「滑らかな合成」ロジック ---
+    const threshold = 0.005; // 5m手前から合成開始
+    const deadzone = 0.003;  // 3m以内は完全に直線
+
+    let currentDist = Math.min(distFromStart, totalDist - distFromStart);
+
+    if (currentDist < deadzone || isCriticalSection(p1.name, p2.name)) {
+        // 3m以内は完全な直線補正
+        return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
+    } else if (currentDist < threshold) {
+        // 3mから5mの間で、線路の動き(w=0)から直線の動き(w=1)へ徐々に移行
+        const w = 1.0 - (currentDist - deadzone) / (threshold - deadzone);
+        return {
+            lng: snappedLng + (lerpLng - snappedLng) * w,
+            lat: snappedLat + (lerpLat - snappedLat) * w,
+            angle: snappedAngle + (straightAngle - snappedAngle) * w
         };
     }
-    return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
-}
 
+    // それ以外（駅間）は通常の線路スナップ
+    return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
+}
         function animate() {
             const now = new Date();
             const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
@@ -217,6 +231,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
