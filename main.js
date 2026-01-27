@@ -27,16 +27,18 @@ map.on('load', async () => {
 
     // --- 各レイヤーのベース高さを 0.1m ずつずらして重なりを解消 (Z-fighting防止) ---
 
-// 1. 公園レイヤー（色をはっきり：不透明度 0.6）
+// 1. 公園レイヤー（白に変更）
 map.addLayer({
     'id': 'floating-parks',
     'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
     'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
     'paint': {
-        'fill-extrusion-color': '#a3ad85', 
+        // 白に変更
+        'fill-extrusion-color': '#ffffff', 
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
         'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
-        'fill-extrusion-opacity': 0.6 // 色がしっかり見えるようにアップ
+        // 道路と区別するため、少しだけ透過させて質感を分ける（0.4）
+        'fill-extrusion-opacity': 0.4 
     }
 });
 
@@ -52,23 +54,26 @@ map.addLayer({
     }
 });
 
-// 3. 道路レイヤー（幅に強弱をつけ、色を薄くした設定）
+// 3. 道路レイヤー（白に変更、幅の強弱は維持）
 map.addLayer({
     'id': 'floating-roads',
     'source': 'composite', 'source-layer': 'road', 'type': 'line',
     'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'street'], true, false],
     'paint': {
-        // 色を濃い朱色から、淡いパステルオレンジ (#ffcc80) に変更
-        'line-color': '#ffcc80',
+        // 白に変更
+        'line-color': '#ffffff',
         
-        // 道路の種別によって太さを分ける設定
+        // 道路の種別による太さの描き分け（維持）
         'line-width': [
             'match',
             ['get', 'class'],
-            ['motorway', 'trunk', 'primary'], 6,    // 太い道路（高速・国道など）
-            ['secondary', 'tertiary'], 3,          // 中間の道路
-            1.5                                   // 細い道路（一般道：street）
+            ['motorway', 'trunk', 'primary'], 9,    // より目立たせるため少し太く (6->8)
+            ['secondary', 'tertiary'], 5,          // (3->4)
+            3                                     // (1.5->2)
         ],
+        'line-opacity': 0.6 // 地面の黒に対して光って見える程度の透過度
+    }
+});
         
         // 背景の黒に馴染みつつ、存在感が出るように透明度を調整
         'line-opacity': 0.7 
@@ -251,6 +256,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
