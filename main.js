@@ -27,7 +27,7 @@ map.on('load', async () => {
 
     // --- 各レイヤーのベース高さを 0.1m ずつずらして重なりを解消 (Z-fighting防止) ---
 
-// 1. 公園レイヤー（最下層: 30.0m）
+// 1. 公園レイヤー（視認性アップ：不透明度 0.2）
 map.addLayer({
     'id': 'floating-parks',
     'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
@@ -36,38 +36,37 @@ map.addLayer({
         'fill-extrusion-color': '#a3ad85', 
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
         'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
-        'fill-extrusion-opacity': 0.1
+        'fill-extrusion-opacity': 0.2 // 0.1 -> 0.2 へ
     }
 });
 
-// 2. 川・水面レイヤー（復活：30.1m）
+// 2. 川・水面レイヤー（視認性アップ：不透明度 0.15）
 map.addLayer({
     'id': 'floating-water',
     'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
     'paint': {
-        // 落ち着いた水色
         'fill-extrusion-color': '#b0c4de', 
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
         'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-        // 下の地下鉄が見えるよう極薄く設定
-        'fill-extrusion-opacity': 0.05 
+        'fill-extrusion-opacity': 0.15 // 0.05 -> 0.15 へ
     }
 });
 
-// 3. 道路レイヤー（30.2m：主要幹線道路のみ）
+// 3. 道路レイヤー（薄いオレンジに変更）
 map.addLayer({
     'id': 'floating-roads',
     'source': 'composite', 'source-layer': 'road', 'type': 'fill-extrusion',
     'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary'], true, false],
     'paint': {
-        'fill-extrusion-color': '#888888',
+        // 薄いオレンジ色（ピーチ系）に設定
+        'fill-extrusion-color': '#ffcc99', 
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
         'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.25,
-        'fill-extrusion-opacity': 0.1
+        'fill-extrusion-opacity': 0.15
     }
 });
 
-// 4. 建物レイヤー（最上層: 30.3m〜）
+// 4. 建物レイヤー（極限まで透明化 + 高さを抑えて視界を確保）
 map.addLayer({
     'id': 'floating-buildings',
     'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
@@ -75,9 +74,10 @@ map.addLayer({
     'paint': {
         'fill-extrusion-color': '#ffffff',
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
-        'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 5], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
-        // 透明度を 0.5 から 0.2 へ大幅に下げて、地下鉄が透けて見えるように調整
-        'fill-extrusion-opacity': 0.2 
+        // 建物の高さを本来の 30% 程度に圧縮して「厚み」を減らす工夫
+        'fill-extrusion-height': ["+", ["*", ["coalesce", ["get", "height"], 5], 0.3], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
+        // 0.2 -> 0.08 まで下げて、ほぼ空気のような存在感に
+        'fill-extrusion-opacity': 0.08 
     }
 });
     
@@ -241,6 +241,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
