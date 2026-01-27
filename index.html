@@ -2,29 +2,23 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>Sapporo-Transit-3D test1</title>
+  <title>Sapporo-Transit-3D test2</title>
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
   <style>
     body { margin: 0; padding: 0; background: #fff; overflow: hidden; }
     #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-    
-    /* UIパネルのデザイン調整 */
     #info { 
       position: absolute; top: 15px; left: 15px; z-index: 10;
-      background: rgba(255, 255, 255, 0.9); color: #333; padding: 12px 18px; 
-      border-radius: 8px; font-family: 'Helvetica Neue', Arial, sans-serif; 
-      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      background: rgba(255, 255, 255, 0.9); color: #333; padding: 12px; 
+      border-radius: 8px; font-family: sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       min-width: 180px;
     }
-    #date { 
-      font-size: 14px; font-weight: bold; color: #666; margin-bottom: 2px; 
-    }
-    #clock { 
-      font-size: 28px; font-weight: bold; color: #111; line-height: 1.1; 
-    }
-    #status { font-size: 12px; margin-top: 6px; color: #444; }
+    /* 日付用のスタイルを追加 */
+    #date { font-size: 14px; font-weight: bold; color: #666; margin-bottom: 2px; }
+    #clock { font-size: 24px; font-weight: bold; line-height: 1.1; }
+    #status { font-size: 12px; margin-top: 4px; }
     .status-live { color: #ff0000; font-weight: bold; animation: blink 1.5s infinite; }
     @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
   </style>
@@ -35,7 +29,6 @@
   <div id="status">SYSTEM: <span class="status-live">LIVE</span> <span id="train-count"></span></div>
 </div>
 <div id="map"></div>
-
 <script src="config.js"></script>
 <script src="main.js"></script>
 </body>
