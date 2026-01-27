@@ -42,7 +42,7 @@ map.addLayer({
     }
 });
 
-// 2. 川・水面レイヤー（色をはっきり：不透明度 0.5）
+// 2. 川・水面レイヤー（現状のまま、またはさらに薄く）
 map.addLayer({
     'id': 'floating-water',
     'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
@@ -50,7 +50,7 @@ map.addLayer({
         'fill-extrusion-color': '#b0c4de', 
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
         'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-        'fill-extrusion-opacity': 0.5 // 存在感が出るようにアップ
+        'fill-extrusion-opacity': 0.3 
     }
 });
 
@@ -67,32 +67,24 @@ map.addLayer({
         'line-width': [
             'match',
             ['get', 'class'],
-            ['motorway', 'trunk', 'primary'], 9,    // より目立たせるため少し太く (6->8)
-            ['secondary', 'tertiary'], 5,          // (3->4)
-            3                                     // (1.5->2)
+            ['motorway', 'trunk', 'primary'], 8,    // より目立たせるため少し太く (6->8)
+            ['secondary', 'tertiary'], 4,          // (3->4)
+            2                                     // (1.5->2)
         ],
         'line-opacity': 0.6 // 地面の黒に対して光って見える程度の透過度
     }
 });
-        
-        // 背景の黒に馴染みつつ、存在感が出るように透明度を調整
-        'line-opacity': 0.7 
-    }
-});
 
-// 4. 建物レイヤー（完全に不透明な白い都市）
+// 4. 建物レイヤー（不透明な白：維持）
 map.addLayer({
     'id': 'floating-buildings',
     'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
     'filter': ['>=', ['get', 'height'], 3], 
     'paint': {
-        // 色は純白を維持
-        'fill-extrusion-color': '#ffffff',
+        'fill-extrusion-color': '#ffffff', //
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 
-        // 高さを元のスケールに設定
-        'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
-        // 透明度を 0（不透明）にするため、値を 1.0 に設定
-        'fill-extrusion-opacity': 1.0 
+        'fill-extrusion-height': ["+", ["get", "height"], CONFIG.CITY.FLOAT_HEIGHT + 0.3], //
+        'fill-extrusion-opacity': 1.0 //
     }
 });
     
@@ -256,6 +248,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
