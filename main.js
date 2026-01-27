@@ -26,21 +26,23 @@ map.on('load', async () => {
         }
     });
 
-// 1. 公園レイヤー（25m）
+// 1. 公園レイヤー（25m上空の薄い膜）
 map.addLayer({
     'id': 'floating-parks',
     'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
     'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
     'paint': {
-        // 彩度を抑えた「地味な黄緑」（和名：若菜色や萌黄に近いトーン）
+        // 落ち着いた黄緑を維持
         'fill-extrusion-color': '#a3ad85', 
-        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT - 1,
-        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT,
-        // 「薄い透過」を実現するため、不透明度をさらに下げて 0.15 に設定
-        'fill-extrusion-opacity': 0.15 
+        // 高さを 30m に固定（config.js の FLOAT_HEIGHT を参照）
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
+        // 厚みをわずか 0.1m にして「厚板」から「薄い膜」に変更
+        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
+        // 不透明度を 0.15 から 0.05 へ大幅に下げ、地下鉄が透けて見えるように調整
+        'fill-extrusion-opacity': 0.05 
     }
 });
-
+    
   // 2. 川・水面レイヤー（25m）
 map.addLayer({
     'id': 'floating-water',
@@ -231,6 +233,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
