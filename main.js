@@ -73,6 +73,23 @@ map.addLayer({
     }
 });
 
+// 4. 道路レイヤー（25m上空の透明な道）
+map.addLayer({
+    'id': 'floating-roads',
+    'source': 'composite', 'source-layer': 'road', 'type': 'fill-extrusion',
+    'paint': {
+        // 建物と同じ薄いグレーに設定
+        'fill-extrusion-color': '#d1d1d1',
+        // 30mの高さに配置
+        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT,
+        // 厚みをごくわずか（0.2m）にして「薄い板」状にする
+        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
+        // 地下鉄がはっきり見えるよう、不透明度をかなり低めの 0.15 に設定
+        'fill-extrusion-opacity': 0.15
+    }
+});
+
+    
     await initSubway();
 });
 
@@ -233,6 +250,7 @@ function getHybridPos(p1, p2, pct) {
     } catch (e) { console.error(e); }
 
 }
+
 
 
 
