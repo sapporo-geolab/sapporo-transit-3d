@@ -225,82 +225,70 @@ function getHybridPos(p1, p2, pct) {
         
 function animate() {
     const now = new Date();
-    // 日付の表示ロジック（そのまま維持）
+    
+    // --- 1. 日付の表示ロジック（形式を画像に合わせて修正） ---
     const dateEl = document.getElementById('date'); 
     if (dateEl) {
-        const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
-        const w = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
-        dateEl.innerText = `${y}.${m}.${d} ${w}`;
+        const y = now.getFullYear();
+        const m = now.getMonth() + 1;
+        const d = now.getDate();
+        const w = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
+        // 日本語形式に変更: 例 2026年1月27日(火)
+        dateEl.innerText = `${y}年${m}月${d}日(${w})`; 
     }
 
     const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
     clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
     
- const z = map.getZoom();
+    const z = map.getZoom();
+    const center = map.getCenter();
 
-    // 平面方向の拡大率（最大15倍）
+    // ★横方向の縮みを補正する係数（札幌なら約1.37倍に引き伸ばす）
+    const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
+
     const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
-    
-    // ★ 高方向の拡大率を修正
-    // 平面と同じ scale を使うことで、ズームアウトしても「かまぼこ板」にならず、
-    // 背の高いプロポーションを維持します
-    const hScale = scale; 
+    const hScale = scale; // ズームアウトしても「かまぼこ板」にならないよう高さを連動
 
-    // 電車のサイズ計算
     const L = CONFIG.TRAIN.LENGTH * scale;
     const W = CONFIG.TRAIN.WIDTH * scale;
-    // 高さは CONFIG.TRAIN.HEIGHT (25) に hScale を掛け合わせる
-    const H = CONFIG.TRAIN.HEIGHT * hScale;
 
     const feats = [];
     
-            activeTrips.forEach((stops, tid) => {
-                const rid = tripToRoute.get(tid), info = routeData.get(rid);
-                if (!info) return;
-                let hBase = info.name.includes("南北線") ? 7 : (info.name.includes("東西線") ? 4 : 1);
+    activeTrips.forEach((stops, tid) => {
+        const rid = tripToRoute.get(tid), info = routeData.get(rid);
+        if (!info) return;
+        let hBase = info.name.includes("南北線") ? 7 : (info.name.includes("東西線") ? 4 : 1);
 
-                for (let i = 0; i < stops.length - 1; i++) {
-                    const c = stops[i], n = stops[i+1];
-                    if (s >= c.sec && s < n.sec) {
-                        const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
-                        if (!p1 || !p2) continue;
-                        const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
-                        const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
-                        const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0]*cA-p[1]*sA), pos.lat + (p[0]*sA+p[1]*cA)]);
-                        feats.push({ type: 'Feature', properties: { color: info.color, h_base: hBase, h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
-                        break;
-                    }
-                }
-            });
-            if (map.getSource('trains')) map.getSource('trains').setData({ type: 'FeatureCollection', features: feats });
-            trainCountEl.innerText = `${feats.length} trains running`;
-            requestAnimationFrame(animate);
+        for (let i = 0; i < stops.length - 1; i++) {
+            const c = stops[i], n = stops[i+1];
+            if (s >= c.sec && s < n.sec) {
+                const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
+                if (!p1 || !p2) continue;
+                
+                const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
+                const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
+
+                // ★経度(lng)側の計算にのみ latCorrection を掛けて、横向きでも長さを維持
+                const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [
+                    pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, 
+                    pos.lat + (p[0] * sA + p[1] * cA)
+                ]);
+
+                feats.push({ 
+                    type: 'Feature', 
+                    properties: { 
+                        color: info.color, 
+                        h_base: hBase, 
+                        h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) 
+                    }, 
+                    geometry: { type: 'Polygon', coordinates: [corners] } 
+                });
+                break;
+            }
         }
-        animate();
-    } catch (e) { console.error(e); }
+    });
 
+    if (map.getSource('trains')) map.getSource('trains').setData({ type: 'FeatureCollection', features: feats });
+    trainCountEl.innerText = `${feats.length} trains running`;
+    requestAnimationFrame(animate);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
