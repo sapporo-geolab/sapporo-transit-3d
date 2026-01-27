@@ -32,12 +32,12 @@ map.addLayer({
     'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
     'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
     'paint': {
-        // 色を濃い緑（#2e4d2e）から、明るく淡い緑（#90ee90）へ変更
-        'fill-extrusion-color': '#90ee90', 
+        // 彩度を抑えた「地味な黄緑」（和名：若菜色や萌黄に近いトーン）
+        'fill-extrusion-color': '#a3ad85', 
         'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT - 1,
         'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT,
-        // 不透明度を 0.8 から 0.3（より透き通る設定）へ変更
-        'fill-extrusion-opacity': 0.3 
+        // 「薄い透過」を実現するため、不透明度をさらに下げて 0.15 に設定
+        'fill-extrusion-opacity': 0.15 
     }
 });
 
@@ -195,3 +195,4 @@ async function initSubway() {
     } catch (e) { console.error(e); }
 
 }
+
