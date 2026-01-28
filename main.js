@@ -120,7 +120,6 @@ async function initSubway() {
             allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
         });
 
-        // クリックイベント
         map.on('click', 'tr-layer', (e) => {
             const f = e.features[0];
             selectedTid = f.properties.tid;
@@ -157,7 +156,6 @@ async function initSubway() {
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        // 補助関数群
         function isCriticalSection(n1, n2) {
             const pairs = [["さっぽろ", "大通"], ["大通", "すすきの"], ["大通", "豊水すすきの"], ["大通", "西１１丁目"], ["大通", "西11丁目"], ["大通", "バスセンター前"]];
             return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
@@ -220,7 +218,9 @@ async function initSubway() {
             activeTrips.forEach((stops, tid) => {
                 const rid = tripToRoute.get(tid), info = routeData.get(rid);
                 if (!info) return;
-                let hBaseLayer = info.name.includes("南北線") ? 7 : (info.name.includes("東西線") ? 4 : 1);
+
+                // ★ベース高度の調整：地下区間での浮きを解消するため最小限に設定
+                let hBaseLayer = info.name.includes("南北線") ? 0.3 : (info.name.includes("東西線") ? 0.2 : 0.1);
 
                 for (let i = 0; i < stops.length - 1; i++) {
                     const c = stops[i], n = stops[i+1];
@@ -232,7 +232,6 @@ async function initSubway() {
                         const elapsed = s - (c.sec + CONFIG.TRAIN.STOP_DURATION);
                         const pct = Math.max(0, Math.min(1.0, elapsed / Math.max(1, travelTime)));
                         
-                        // 高度計算
                         const alt1 = STATION_ALTITUDE[p1.sid] || 0;
                         const alt2 = STATION_ALTITUDE[p2.sid] || 0;
                         const currentAlt = alt1 + (alt2 - alt1) * pct;
@@ -254,7 +253,11 @@ async function initSubway() {
 
                         trainFeats.push({ 
                             type: 'Feature', 
-                            properties: { tid: tid, color: info.color, h_base: hBaseLayer + currentAlt, h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * hScale) }, 
+                            properties: { 
+                                tid: tid, color: info.color, 
+                                h_base: hBaseLayer + currentAlt, // ★微浮き + 坂道高度
+                                h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * hScale) 
+                            }, 
                             geometry: { type: 'Polygon', coordinates: [corners] } 
                         });
                         break;
