@@ -181,16 +181,123 @@ async function initSubway() {
 
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
 
+        // --- 1. 運行データの整理（時刻表用データも同時に作成） ---
         const activeTrips = new Map();
+        const allStopTimes = new Map(); // 時刻表パネル用
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
+
         stT.split('\n').forEach(line => {
             if (!line.includes(targetDay)) return;
             const c = line.replace(/"/g, "").split(',');
             if (c.length < 5 || line.startsWith('trip_id')) return;
-            const tid = c[0].trim(), t = c[1].split(':'), sec = (parseInt(t[0])||0)*3600 + (parseInt(t[1])||0)*60 + (parseInt(t[2])||0);
+            
+            const tid = c[0].trim();
+            const arrivalTime = c[1].trim().substring(0, 5); // HH:mm 形式
+            const sid = c[3].trim();
+            const sname = stopMap.get(sid)?.name || "不明な駅";
+
+            // アニメーション用
+            const t = c[1].split(':'), sec = (parseInt(t[0])||0)*3600 + (parseInt(t[1])||0)*60 + (parseInt(t[2])||0);
             if (!activeTrips.has(tid)) activeTrips.set(tid, []);
-            activeTrips.get(tid).push({ sec, sid: c[3].trim() });
+            activeTrips.get(tid).push({ sec, sid });
+
+            // 時刻表表示用
+            if (!allStopTimes.has(tid)) allStopTimes.set(tid, []);
+            allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
         });
+
+        // --- 2. クリックイベントの実装（Mini Tokyo 3D風） ---
+        map.on('click', 'tr-layer', (e) => {
+            const f = e.features[0];
+            const tid = f.properties.tid;
+            const rid = tripToRoute.get(tid);
+            const info = routeData.get(rid);
+
+            // ① 吹き出しポップアップ（追尾なし）
+            new mapboxgl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(`<div style="border-left: 5px solid ${f.properties.color}; padding-left: 8px;">
+                            <strong style="font-size:14px;">${info.name}</strong><br>
+                            <span style="color:#666; font-size:12px;">運行ID: ${tid}</span>
+                          </div>`)
+                .addTo(map);
+
+            // ② 詳細パネル（時刻表）を表示
+            const panel = document.getElementById('panel');
+            const titleEl = document.getElementById('panel-title');
+            const timetableEl = document.getElementById('timetable');
+
+            titleEl.innerText = `${info.name} (運行ID: ${tid})`;
+            timetableEl.innerHTML = '';
+
+            const stops = allStopTimes.get(tid) || [];
+            stops.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'station-item';
+                item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
+                timetableEl.appendChild(item);
+            });
+
+            panel.classList.add('active');
+        });
+
+        // マウスカーソルを指マークに変更
+        map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
+
+        // --- 3. アニメーション関数（tidの付与を含む） ---
+        function animate() {
+            const now = new Date();
+            if (dateEl) {
+                const y = now.getFullYear(), m = now.getMonth() + 1, d = now.getDate(), w = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
+                dateEl.innerText = `${y}年${m}月${d}日(${w})`; 
+            }
+            clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
+            const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
+            
+            const z = map.getZoom(), center = map.getCenter();
+            const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
+            const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
+            
+            const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
+            const stopFeats = [];
+            stopMap.forEach((val) => {
+                const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, { units: 'meters', steps: 32, properties: { name: val.name } });
+                stopFeats.push(circle);
+            });
+            if (map.getSource('stops-source')) map.getSource('stops-source').setData({ type: 'FeatureCollection', features: stopFeats });
+
+            const hScale = scale, L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
+            const trainFeats = [];
+
+            activeTrips.forEach((stops, tid) => {
+                const rid = tripToRoute.get(tid), info = routeData.get(rid);
+                if (!info) return;
+                let hBase = info.name.includes("南北線") ? 7 : (info.name.includes("東西線") ? 4 : 1);
+
+                for (let i = 0; i < stops.length - 1; i++) {
+                    const c = stops[i], n = stops[i+1];
+                    if (s >= c.sec && s < n.sec) {
+                        const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
+                        if (!p1 || !p2) continue;
+                        const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
+                        const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
+                        const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
+                        
+                        // properties に tid を追加！
+                        trainFeats.push({ 
+                            type: 'Feature', 
+                            properties: { tid: tid, color: info.color, h_base: hBase, h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) }, 
+                            geometry: { type: 'Polygon', coordinates: [corners] } 
+                        });
+                        break;
+                    }
+                }
+            });
+            if (map.getSource('trains')) map.getSource('trains').setData({ type: 'FeatureCollection', features: trainFeats });
+            trainCountEl.innerText = `${trainFeats.length} trains running`;
+            requestAnimationFrame(animate);
+        }
 
         // 補助関数
         function isCriticalSection(n1, n2) {
@@ -227,60 +334,8 @@ async function initSubway() {
             return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
         }
 
-        // --- アニメーションループ ---
-        function animate() {
-            const now = new Date();
-            if (dateEl) {
-                const y = now.getFullYear(), m = now.getMonth() + 1, d = now.getDate(), w = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
-                dateEl.innerText = `${y}年${m}月${d}日(${w})`; 
-            }
-            clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
-            const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
-            
-            const z = map.getZoom(), center = map.getCenter();
-            const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
-            const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
-            
-            // 3Dサークルの半径更新
-            const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
-            const stopFeats = [];
-            stopMap.forEach((val) => {
-                const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, { units: 'meters', steps: 32, properties: { name: val.name } });
-                stopFeats.push(circle);
-            });
-            if (map.getSource('stops-source')) map.getSource('stops-source').setData({ type: 'FeatureCollection', features: stopFeats });
+        animate();
 
-            const hScale = scale, L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
-            const trainFeats = [];
-            activeTrips.forEach((stops, tid) => {
-                const rid = tripToRoute.get(tid), info = routeData.get(rid);
-                if (!info) return;
-                let hBase = info.name.includes("南北線") ? 7 : (info.name.includes("東西線") ? 4 : 1);
-                for (let i = 0; i < stops.length - 1; i++) {
-                    const c = stops[i], n = stops[i+1];
-                    if (s >= c.sec && s < n.sec) {
-                        const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
-                        if (!p1 || !p2) continue;
-                        const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
-                        const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
-                        const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
-                        trainFeats.push({ type: 'Feature', properties: { color: info.color, h_base: hBase, h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
-                        break;
-                    }
-                }
-            });
-            if (map.getSource('trains')) map.getSource('trains').setData({ type: 'FeatureCollection', features: trainFeats });
-            trainCountEl.innerText = `${trainFeats.length} trains running`;
-            requestAnimationFrame(animate);
-        }
-        
-        animate(); // ループ開始
-
-    } catch (e) { 
-        console.error(e); 
-    }
+    } catch (e) { console.error(e); }
 }
-
-
-
 
