@@ -146,7 +146,20 @@ async function initSubway() {
         
         // 駅の描画
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: stopFeatures } });
-        map.addLayer({ 'id': 'stop-circles', 'type': 'circle', 'source': 'stops-source', 'paint': { 'circle-radius': 4, 'circle-color': '#ffffff' } });
+        map.addLayer({ 
+    'id': 'stop-circles', 
+    'type': 'circle', 
+    'source': 'stops-source', 
+    'paint': { 
+        // 半径は後で animate で動かすので、初期値を設定
+        'circle-radius': CONFIG.STATION.RADIUS, 
+        // 中身を透明にする
+        'circle-color': 'rgba(0,0,0,0)', 
+        // 枠線を黒にする
+        'circle-stroke-color': '#000000', 
+        'circle-stroke-width': CONFIG.STATION.STROKE 
+    } 
+});
         map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-offset': [0, 1.5], 'text-anchor': 'top' }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
 
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -295,3 +308,4 @@ function animate() {
 animate();
     } catch (e) { console.error(e); }
 } // ← ここを閉じ忘れていたのがエラーの原因でした
+
