@@ -260,6 +260,12 @@ function animate() {
     const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
 
     const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
+    
+    // --- 駅のサークルを巨大化させる処理を追加 ---
+    if (map.getLayer('stop-circles')) {
+        map.setPaintProperty('stop-circles', 'circle-radius', CONFIG.STATION.RADIUS * scale);
+        map.setPaintProperty('stop-circles', 'circle-stroke-width', CONFIG.STATION.STROKE * (scale > 1 ? Math.sqrt(scale) : 1));
+    }
     const hScale = scale; // ズームアウトしても「かまぼこ板」にならないよう高さを連動
 
     const L = CONFIG.TRAIN.LENGTH * scale;
@@ -308,4 +314,5 @@ function animate() {
 animate();
     } catch (e) { console.error(e); }
 } // ← ここを閉じ忘れていたのがエラーの原因でした
+
 
