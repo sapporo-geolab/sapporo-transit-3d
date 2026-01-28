@@ -4,21 +4,22 @@
     bottom: -320px; /* 最初は隠す */
     left: 50%;
     transform: translateX(-50%);
-    width: 90%;
-    max-width: 400px; /* Mini Tokyo風に幅を制限 */
-    height: 280px;
+    width: 95%;
+    max-width: 420px; /* Mini Tokyo風のコンパクトな幅 */
+    height: 300px;
     background: rgba(30, 30, 30, 0.95);
     color: white;
     z-index: 20;
     transition: bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     font-family: 'Helvetica Neue', Arial, sans-serif;
     box-shadow: 0 -8px 30px rgba(0,0,0,0.6);
-    overflow: hidden; /* スクロールはリスト内のみ */
-    border-radius: 16px 16px 0 0; /* 角の丸み */
+    overflow: hidden; /* パネル自体はスクロールさせない */
+    border-radius: 16px 16px 0 0;
 }
 
 #panel.active { bottom: 0; }
 
+/* ヘッダー部分 */
 .panel-header {
     padding: 16px;
     background: rgba(0, 0, 0, 0.3);
@@ -43,26 +44,31 @@
     border-radius: 2px;
 }
 
-.close-btn { cursor: pointer; font-size: 22px; opacity: 0.7; }
+.close-btn { cursor: pointer; font-size: 22px; opacity: 0.7; padding: 0 5px; }
 .close-btn:hover { opacity: 1; }
 
+/* 時刻表リストエリア */
 #timetable {
-    height: 200px;
+    height: 230px;
     overflow-y: auto;
     padding: 10px 20px;
+    position: relative; /* ドットと線の基準にする */
 }
 
-/* 駅リストのスタイル */
+/* ★駅リストの各項目（高さを45pxに固定） */
 .station-item {
+    height: 45px; 
     display: flex;
     align-items: center;
-    padding: 10px 0;
+    padding: 0;
+    margin-left: 10px;
+    padding-left: 25px;
     position: relative;
-    border-left: 2px solid rgba(255,255,255,0.2);
-    margin-left: 6px;
-    padding-left: 20px;
+    border-left: 2px solid rgba(255,255,255,0.2); /* 背景の細い線 */
+    box-sizing: border-box;
 }
 
+/* 駅の白丸（背景用） */
 .station-item::before {
     content: '';
     position: absolute;
@@ -71,7 +77,40 @@
     height: 10px;
     background: #fff;
     border-radius: 50%;
+    z-index: 1;
 }
 
 .station-time { width: 70px; color: #888; font-size: 13px; font-family: monospace; }
 .station-name { font-size: 15px; }
+
+/* ★走行中のルートを示す太い線 */
+#progress-line {
+    position: absolute;
+    left: 29px; /* station-itemの margin(10) + padding(25) - 6 くらいで調整 */
+    top: 32px;  /* 最初の駅の丸の中心に合わせる */
+    width: 3px;
+    background: #fff; /* JSで路線の色に変える */
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* ★現在地を示す光る点 */
+#pulsating-dot {
+    position: absolute;
+    left: 25px; /* 親のmargin+paddingと合わせる */
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    z-index: 3;
+    box-shadow: 0 0 10px #fff, 0 0 20px #fff;
+    animation: pulse 1.5s infinite;
+    pointer-events: none;
+    display: none;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+    70% { transform: scale(1.2); opacity: 0.8; box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+    100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
