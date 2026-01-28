@@ -136,17 +136,14 @@ async function initSubway() {
             if (c.length >= 3) tripToRoute.set(c[2].trim(), c[0].trim());
         });
 
-        // --- ★ 修正ポイント1: 先に全ての Source (データ) を登録する ---
+        // --- データの登録 ---
         map.addSource('rail', { type: 'geojson', data: subGeo });
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: stopFeatures } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-        // --- ★ 修正ポイント2: その後に Layer (見た目) を追加する ---
-        
-        // 路線
+        // --- レイヤーの追加 ---
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
         
-        // 駅の3D円盤（地面に張り付く）
         map.addLayer({
             'id': 'stop-circles-3d',
             'type': 'fill-extrusion',
@@ -159,7 +156,6 @@ async function initSubway() {
             }
         });
 
-        // 駅の黒い縁取り
         map.addLayer({
             'id': 'stop-circles-outline',
             'type': 'line',
@@ -170,7 +166,6 @@ async function initSubway() {
             }
         });
 
-        // 駅名ラベル
         map.addLayer({ 
             'id': 'stop-labels', 
             'type': 'symbol', 
@@ -184,10 +179,8 @@ async function initSubway() {
             'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } 
         });
 
-        // 電車
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
 
-        // --- 運行データ処理とアニメーション（以下、前回と同じ） ---
         const activeTrips = new Map();
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
         stT.split('\n').forEach(line => {
@@ -199,6 +192,7 @@ async function initSubway() {
             activeTrips.get(tid).push({ sec, sid: c[3].trim() });
         });
 
+        // 補助関数
         function isCriticalSection(n1, n2) {
             const pairs = [["さっぽろ", "大通"], ["大通", "すすきの"], ["大通", "豊水すすきの"], ["大通", "西１１丁目"], ["大通", "西11丁目"], ["大通", "バスセンター前"]];
             return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
@@ -233,6 +227,7 @@ async function initSubway() {
             return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
         }
 
+        // --- アニメーションループ ---
         function animate() {
             const now = new Date();
             if (dateEl) {
@@ -246,7 +241,7 @@ async function initSubway() {
             const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
             const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
             
-            // サークルの半径更新（駅名プロパティ付き）
+            // 3Dサークルの半径更新
             const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
             const stopFeats = [];
             stopMap.forEach((val) => {
@@ -278,91 +273,13 @@ async function initSubway() {
             trainCountEl.innerText = `${trainFeats.length} trains running`;
             requestAnimationFrame(animate);
         }
-        animate();
-    } catch (e) { console.error(e); }
+        
+        animate(); // ループ開始
+
+    } catch (e) { 
+        console.error(e); 
+    }
 }
-
-    const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
-    clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
-    
-    const z = map.getZoom();
-const center = map.getCenter();
-
-// ★ 緯度補正：横向きでも比率を維持
-const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
-
-// スケール計算（1回にまとめます）
-const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
-
-// --- 駅のサークルを更新 ---
-// 電車の長さ (L) に合わせてサークルの半径（メートル）を計算
-// ここを調整することで、常に電車をすっぽり覆うサイズになります
-const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
-
-const stopFeatures = [];
-stopMap.forEach((val) => {
-    // Turfを使って地面に張り付く円を作成
-    const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, {
-        units: 'meters',
-        steps: 32
-    });
-    stopFeatures.push(circle);
-});
-
-if (map.getSource('stops-source')) {
-    map.getSource('stops-source').setData({
-        type: 'FeatureCollection',
-        features: stopFeatures
-    });
-}
-
-const hScale = scale; // 高さも連動
-const L = CONFIG.TRAIN.LENGTH * scale;
-const W = CONFIG.TRAIN.WIDTH * scale;
-
-    const feats = [];
-    
-    activeTrips.forEach((stops, tid) => {
-        const rid = tripToRoute.get(tid), info = routeData.get(rid);
-        if (!info) return;
-        let hBase = info.name.includes("南北線") ? 7 : (info.name.includes("東西線") ? 4 : 1);
-
-        for (let i = 0; i < stops.length - 1; i++) {
-            const c = stops[i], n = stops[i+1];
-            if (s >= c.sec && s < n.sec) {
-                const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
-                if (!p1 || !p2) continue;
-                
-                const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
-                const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
-
-                // ★経度(lng)側の計算にのみ latCorrection を掛けて、横向きでも長さを維持
-                const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [
-                    pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, 
-                    pos.lat + (p[0] * sA + p[1] * cA)
-                ]);
-
-                feats.push({ 
-                    type: 'Feature', 
-                    properties: { 
-                        color: info.color, 
-                        h_base: hBase, 
-                        h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) 
-                    }, 
-                    geometry: { type: 'Polygon', coordinates: [corners] } 
-                });
-                break;
-            }
-        }
-    });
-
-    if (map.getSource('trains')) map.getSource('trains').setData({ type: 'FeatureCollection', features: feats });
-    trainCountEl.innerText = `${feats.length} trains running`;
-    requestAnimationFrame(animate);
-}
-animate();
-    } catch (e) { console.error(e); }
-} // ← ここを閉じ忘れていたのがエラーの原因でした
 
 
 
