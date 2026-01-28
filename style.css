@@ -1,40 +1,36 @@
-/* 下部詳細パネル */
+/* style.css の #panel 部分を書き換え */
 #panel {
     position: absolute;
-    bottom: -300px; /* 最初は隠しておく */
-    left: 0;
-    width: 100%;
+    bottom: -300px;
+    left: 50%; /* 中央寄せの開始点 */
+    transform: translateX(-50%); /* 自身の幅の半分だけ左に戻して完全中央へ */
+    width: 90%; /* モバイル向け基本幅 */
+    max-width: 450px; /* PCで見ても広がりすぎない最大幅 */
     height: 250px;
     background: rgba(30, 30, 30, 0.95);
     color: white;
     z-index: 20;
     transition: bottom 0.3s ease-out;
     font-family: sans-serif;
-    box-shadow: 0 -5px 15px rgba(0,0,0,0.3);
+    box-shadow: 0 -5px 25px rgba(0,0,0,0.5); /* 影を少し強調 */
     overflow-y: auto;
+    border-radius: 12px 12px 0 0; /* 角を丸めてカード風に */
 }
 
-#panel.active {
-    bottom: 0;
-}
-
-/* パネル内のヘッダー */
-.panel-header {
-    padding: 15px;
-    background: #000;
-    position: sticky;
-    top: 0;
+/* タイトル部分のレイアウト調整 */
+.panel-title { 
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    font-weight: bold; 
+    font-size: 18px; 
 }
 
-.panel-title { font-weight: bold; font-size: 18px; }
-
-.close-btn {
-    cursor: pointer;
-    font-size: 24px;
-    padding: 0 10px;
+/* 路線カラーの縦棒 */
+.line-strip {
+    width: 6px;
+    height: 24px;
+    margin-right: 12px;
+    border-radius: 2px;
 }
 
 /* 駅リスト（タイムテーブル） */
@@ -75,4 +71,5 @@
     border-radius: 8px;
     padding: 10px;
     font-weight: bold;
+
 }
