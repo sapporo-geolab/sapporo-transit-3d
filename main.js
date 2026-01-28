@@ -289,7 +289,7 @@ async function initSubway() {
             return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
         }
 
-        // --- 4. アニメーション関数 ---
+// --- 4. アニメーション関数（電車の到着・停車・発車ロジックを修正） ---
         function animate() {
             const now = new Date();
             if (dateEl) {
@@ -325,11 +325,19 @@ async function initSubway() {
                         const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
                         if (!p1 || !p2) continue;
                         
-                        const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
+                        // ★修正：データ上の時刻 (c.sec) を到着時間とし、そこから STOP_DURATION 秒間は移動させない
+                        // 次の駅までの純粋な走行時間を算出
+                        const travelTime = (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION;
+                        // 現在時刻から「到着時刻 + 停車時間」を引いた経過時間を算出
+                        const elapsed = s - (c.sec + CONFIG.TRAIN.STOP_DURATION);
+                        // 走行開始前は 0、駅間走行中は 0〜1、次駅到着時は 1 になるように計算
+                        const pct = Math.max(0, Math.min(1.0, elapsed / Math.max(1, travelTime)));
+                        
+                        const pos = getHybridPos(p1, p2, pct);
                         const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
                         const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
                         
-                        // ★ 選択された電車を動的に追尾
+                        // 選択された電車を動的に追尾（表示内容はご要望通り維持）
                         if (tid === selectedTid && activePopup) {
                             activePopup.setLngLat([pos.lng, pos.lat]);
                             const isStopped = (s - c.sec) < CONFIG.TRAIN.STOP_DURATION;
@@ -371,3 +379,4 @@ async function initSubway() {
         console.error(e); 
     }
 }
+
