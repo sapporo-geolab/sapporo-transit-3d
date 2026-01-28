@@ -66,42 +66,7 @@ async function initSubway() {
 
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-
-        // --- 全路線の統合3D線路リボン (重複排除強化版) ---
-        const shelterFeatures = [];
-        const seenLines = new Set();
-        subGeo.features.forEach(feature => {
-            if (feature.geometry.type !== "LineString") return;
-            const coords = feature.geometry.coordinates;
-            // 精度をtoFixed(2)に落として東西線の重複を確実に統合
-            const h1 = `${coords[0][0].toFixed(2)},${coords[0][1].toFixed(2)}-${coords[coords.length-1][0].toFixed(2)}`;
-            const h2 = `${coords[coords.length-1][0].toFixed(2)},${coords[coords.length-1][1].toFixed(2)}-${coords[0][0].toFixed(2)}`;
-            if (seenLines.has(h1) || seenLines.has(h2)) return;
-            seenLines.add(h1);
-
-            const props = feature.properties;
-            let sColor = "#666666";
-            if (props.name?.includes("東西線") || props.colour?.toLowerCase() === "#ff8c00") sColor = "#FF8C00";
-            if (props.name?.includes("南北線") || props.colour?.toLowerCase() === "#008800") sColor = "#008800";
-            if (props.name?.includes("東豊線") || props.colour?.toLowerCase() === "blue") sColor = "#0070C0";
-
-            const turfLine = turf.lineString(coords);
-            const totalDist = turf.length(turfLine);
-            for (let d = 0; d < totalDist; d += 0.04) {
-                const start = turf.along(turfLine, d), end = turf.along(turfLine, Math.min(d + 0.04, totalDist));
-                const getAlt = (pt) => {
-                    const near = turf.nearestPoint(pt, { type: 'FeatureCollection', features: stopFeatures });
-                    for (const key in STATION_ALTITUDE) { if (near.properties.name.includes(key)) return STATION_ALTITUDE[key]; }
-                    return 0;
-                };
-                const midAlt = (getAlt(start) + getAlt(end)) / 2;
-                const offsetL = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.0012, {units: 'kilometers'});
-                const offsetR = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.0012, {units: 'kilometers'});
-                const polygon = [offsetL.geometry.coordinates[0], offsetL.geometry.coordinates[1], offsetR.geometry.coordinates[1], offsetR.geometry.coordinates[0], offsetL.geometry.coordinates[0]];
-                shelterFeatures.push({ type: 'Feature', properties: { h_base: midAlt + 0.05, h_top: midAlt + 0.2, color: sColor }, geometry: { type: 'Polygon', coordinates: [polygon] } });
-            }
-        });
-        map.addSource('shelter-source', { type: 'geojson', data: { type: 'FeatureCollection', features: shelterFeatures } });
+        map.addSource('shelter-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
         map.addLayer({ 'id': 'stop-circles-3d', 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#cccccc', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.5 } });
         for (let i = 0; i < 3; i++) {
@@ -110,9 +75,7 @@ async function initSubway() {
         }
         map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-anchor': 'top', 'text-offset': ['case', ['==', ['get', 'h_base'], 25], ['literal', [0, -4.5]], ['literal', [0, 1.5]]] }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
         
-        // 電車レイヤー
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
-        // 線路レイヤー (電車の色を適用)
         map.addLayer({ 'id': 'shelter-layer', 'type': 'fill-extrusion', 'source': 'shelter-source', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 1.0 } }, 'tr-layer');
 
         const activeTrips = new Map(), allStopTimes = new Map();
@@ -133,6 +96,7 @@ async function initSubway() {
             const f = e.features[0], tid = f.properties.tid, rid = tripToRoute.get(tid);
             const info = routeData.get(rid) || { name: tid.includes("N")?"南北線":tid.includes("T")?"東西線":"東豊線", color: f.properties.color };
             selectedTid = tid;
+            const panel = document.getElementById('panel');
             document.getElementById('panel-title').innerHTML = `<div class="line-strip" style="background-color: ${info.color};"></div><span>${info.name}</span>`;
             document.getElementById('timetable').innerHTML = `<div id="progress-line"></div><div id="pulsating-dot"></div>`;
             (allStopTimes.get(tid) || []).forEach(s => {
@@ -141,7 +105,7 @@ async function initSubway() {
                 item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
                 document.getElementById('timetable').appendChild(item);
             });
-            document.getElementById('panel').classList.add('active');
+            panel.classList.add('active');
             if (activePopup) activePopup.remove();
             activePopup = new mapboxgl.Popup({ closeButton: false, offset: 20 }).setLngLat(e.lngLat).setHTML('<div id="popup-dynamic-content"></div>').addTo(map);
         });
@@ -184,6 +148,45 @@ async function initSubway() {
             });
             if (map.getSource('stops-source')) map.getSource('stops-source').setData({ type: 'FeatureCollection', features: stopFeats });
 
+            // --- 統合3D線路リボン（動的幅更新版） ---
+            const shelterFeatures = [];
+            const seenLineIds = new Set();
+            subGeo.features.forEach(feature => {
+                if (feature.geometry.type !== "LineString") return;
+                const coords = feature.geometry.coordinates;
+                const id1 = `${coords[0][0].toFixed(3)},${coords[0][1].toFixed(3)}-${coords[coords.length-1][0].toFixed(3)}`;
+                const id2 = `${coords[coords.length-1][0].toFixed(3)},${coords[coords.length-1][1].toFixed(3)}-${coords[0][0].toFixed(3)}`;
+                if (seenLineIds.has(id1) || seenLineIds.has(id2)) return;
+                seenLineIds.add(id1);
+
+                const props = feature.properties;
+                let sColor = "#666666";
+                if (props.name?.includes("東西線") || props.colour?.toLowerCase() === "#ff8c00") sColor = "#FF8C00";
+                if (props.name?.includes("南北線") || props.colour?.toLowerCase() === "#008800") sColor = "#008800";
+                if (props.name?.includes("東豊線") || props.colour?.toLowerCase() === "blue") sColor = "#0070C0";
+
+                const turfLine = turf.lineString(coords);
+                const totalDist = turf.length(turfLine);
+                // 電車の幅(CONFIG.TRAIN.WIDTH * scale)より少し狭いオフセット量(約0.8倍)を計算
+                const offsetAmount = (CONFIG.TRAIN.WIDTH * scale) * 0.8;
+
+                for (let d = 0; d < totalDist; d += 0.05) {
+                    const start = turf.along(turfLine, d), end = turf.along(turfLine, Math.min(d + 0.05, totalDist));
+                    const getAlt = (pt) => {
+                        const near = turf.nearestPoint(pt, { type: 'FeatureCollection', features: stopFeatures });
+                        for (const key in STATION_ALTITUDE) { if (near.properties.name.includes(key)) return STATION_ALTITUDE[key]; }
+                        return 0;
+                    };
+                    const midAlt = (getAlt(start) + getAlt(end)) / 2;
+                    
+                    const offsetL = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), offsetAmount, {units: 'degrees'});
+                    const offsetR = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -offsetAmount, {units: 'degrees'});
+                    const poly = [offsetL.geometry.coordinates[0], offsetL.geometry.coordinates[1], offsetR.geometry.coordinates[1], offsetR.geometry.coordinates[0], offsetL.geometry.coordinates[0]];
+                    shelterFeatures.push({ type: 'Feature', properties: { h_base: midAlt + 0.05, h_top: midAlt + 0.15, color: sColor }, geometry: { type: 'Polygon', coordinates: [poly] } });
+                }
+            });
+            if (map.getSource('shelter-source')) map.getSource('shelter-source').setData({ type: 'FeatureCollection', features: shelterFeatures });
+
             const trainFeats = [];
             activeTrips.forEach((stops, tid) => {
                 const rid = tripToRoute.get(tid), info = routeData.get(rid); if (!info) return;
@@ -192,10 +195,8 @@ async function initSubway() {
                     if (s >= c.sec && s < n.sec) {
                         const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid); if (!p1 || !p2) continue;
                         const pct = Math.max(0, Math.min(1.0, (s - (c.sec + CONFIG.TRAIN.STOP_DURATION)) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
-                        
                         let a1 = 0, a2 = 0; for (const k in STATION_ALTITUDE) { if (p1.name.includes(k)) a1 = STATION_ALTITUDE[k]; if (p2.name.includes(k)) a2 = STATION_ALTITUDE[k]; }
                         const currentAlt = a1 + (a2 - a1) * pct;
-
                         const pos = getHybridPos(p1, p2, pct);
                         const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle), L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
                         const corners = [[pos.lng + (-L * cA - -W * sA) * latCorrection, pos.lat + (-L * sA + -W * cA)], [pos.lng + (L * cA - -W * sA) * latCorrection, pos.lat + (L * sA + -W * cA)], [pos.lng + (L * cA - W * sA) * latCorrection, pos.lat + (L * sA + W * cA)], [pos.lng + (-L * cA - W * sA) * latCorrection, pos.lat + (-L * sA + W * cA)], [pos.lng + (-L * cA - -W * sA) * latCorrection, pos.lat + (-L * sA + -W * cA)]];
@@ -206,13 +207,7 @@ async function initSubway() {
                             const popupDiv = document.getElementById('popup-dynamic-content');
                             if (popupDiv) popupDiv.innerHTML = `<div style="display:flex; align-items:center; min-width:140px; font-family:sans-serif;"><div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div><div><div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div><div style="font-size:11px; margin-top:3px; color:#666;">${isSt ? `停車：<b>${p1.name}</b>` : `前駅：${p1.name}`}<br>次駅：<b>${p2.name}</b> ${n.time}</div></div></div>`;
                             const dot = document.getElementById('pulsating-dot'), line = document.getElementById('progress-line');
-                            if (dot && line) { 
-                                const top = (i * 45) + (pct * 45) + 32; 
-                                dot.style.top = `${top-6}px`; 
-                                line.style.backgroundColor = info.color;
-                                line.style.height = `${top-32}px`; 
-                                dot.style.display = 'block'; 
-                            }
+                            if (dot && line) { const top = (i * 45) + (pct * 45) + 32; dot.style.top = `${top-6}px`; line.style.backgroundColor = info.color; line.style.height = `${top-32}px`; dot.style.display = 'block'; }
                         }
                         const hBaseLayer = info.name.includes("南北線") ? 0.3 : (info.name.includes("東西線") ? 0.2 : 0.1);
                         trainFeats.push({ type: 'Feature', properties: { tid, color: info.color, h_base: hBaseLayer + currentAlt, h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * scale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
