@@ -168,7 +168,7 @@ async function initSubway() {
                 const turfLine = turf.lineString(coords);
                 const totalDist = turf.length(turfLine);
                 // 電車の幅(CONFIG.TRAIN.WIDTH * scale)より少し狭いオフセット量(約0.8倍)を計算
-                const offsetAmount = (CONFIG.TRAIN.WIDTH * scale) * 0.8;
+                const offsetAmount = (CONFIG.TRAIN.WIDTH * scale) * 0.5;
 
                 for (let d = 0; d < totalDist; d += 0.05) {
                     const start = turf.along(turfLine, d), end = turf.along(turfLine, Math.min(d + 0.05, totalDist));
@@ -221,3 +221,4 @@ async function initSubway() {
         animate();
     } catch (e) { console.error(e); }
 }
+
