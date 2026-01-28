@@ -181,9 +181,9 @@ async function initSubway() {
 
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
 
-        // --- 1. 運行データの整理（時刻表用データも同時に作成） ---
+        // --- 1. 運行・時刻表データの準備 ---
         const activeTrips = new Map();
-        const allStopTimes = new Map(); // 時刻表パネル用
+        const allStopTimes = new Map(); 
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
 
         stT.split('\n').forEach(line => {
@@ -192,32 +192,30 @@ async function initSubway() {
             if (c.length < 5 || line.startsWith('trip_id')) return;
             
             const tid = c[0].trim();
-            const arrivalTime = c[1].trim().substring(0, 5); // HH:mm 形式
+            const arrivalTime = c[1].trim().substring(0, 5);
             const sid = c[3].trim();
             const sname = stopMap.get(sid)?.name || "不明な駅";
 
-            // アニメーション用
             const t = c[1].split(':'), sec = (parseInt(t[0])||0)*3600 + (parseInt(t[1])||0)*60 + (parseInt(t[2])||0);
             if (!activeTrips.has(tid)) activeTrips.set(tid, []);
             activeTrips.get(tid).push({ sec, sid });
 
-            // 時刻表表示用
             if (!allStopTimes.has(tid)) allStopTimes.set(tid, []);
             allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
         });
 
-// --- 1. クリックイベントの実装（中央パネル & 路線カラー棒） ---
+        // --- 2. クリックイベント（中央パネル & 路線カラー棒） ---
         map.on('click', 'tr-layer', (e) => {
             const f = e.features[0];
             const tid = f.properties.tid;
             const rid = tripToRoute.get(tid);
             const info = routeData.get(rid);
+            if (!info) return;
 
             const panel = document.getElementById('panel');
             const titleEl = document.getElementById('panel-title');
             const timetableEl = document.getElementById('timetable');
 
-            // タイトルを路線名とカラーバーに書き換え
             titleEl.innerHTML = `
                 <div class="line-strip" style="background-color: ${info.color};"></div>
                 <span>${info.name}</span>
@@ -234,22 +232,54 @@ async function initSubway() {
 
             panel.classList.add('active');
 
-            // ポップアップも Mini Tokyo 風にシンプル化
             new mapboxgl.Popup()
                 .setLngLat(e.lngLat)
-                .setHTML(`
-                    <div style="display:flex; align-items:center; padding: 5px; font-weight: bold;">
-                        <div style="width:4px; height:18px; background:${info.color}; margin-right:8px;"></div>
-                        ${info.name}
-                    </div>`)
+                .setHTML(`<div style="display:flex; align-items:center; padding: 5px; font-weight: bold;">
+                            <div style="width:4px; height:18px; background:${info.color}; margin-right:8px;"></div>
+                            ${info.name}
+                          </div>`)
                 .addTo(map);
         });
 
-        // マウスカーソルを指マークに変更
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        // --- 2. アニメーション関数（緯度補正 & 3Dサークル同期） ---
+        // --- 3. 補助関数（ここにないと ReferenceError になります） ---
+        function isCriticalSection(n1, n2) {
+            const pairs = [["さっぽろ", "大通"], ["大通", "すすきの"], ["大通", "豊水すすきの"], ["大通", "西１１丁目"], ["大通", "西11丁目"], ["大通", "バスセンター前"]];
+            return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
+        }
+
+        function getHybridPos(p1, p2, pct) {
+            const lerpLng = p1.lon + (p2.lon - p1.lon) * pct, lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
+            const pt = turf.point([lerpLng, lerpLat]);
+            const straightAngle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
+            let closestPt = pt, min_dist = Infinity, bestFeature = null;
+            subGeo.features.forEach(f => {
+                try {
+                    const snapped = turf.nearestPointOnLine(f, pt);
+                    if (snapped.properties.dist < min_dist) { min_dist = snapped.properties.dist; closestPt = snapped; bestFeature = f; }
+                } catch(e) {}
+            });
+            let snappedLng = closestPt.geometry.coordinates[0], snappedLat = closestPt.geometry.coordinates[1], snappedAngle = straightAngle;
+            if (bestFeature && min_dist < 0.5) { 
+                const nPct = Math.min(1.0, pct + 0.005);
+                const nSnapped = turf.nearestPointOnLine(bestFeature, turf.point([p1.lon + (p2.lon - p1.lon) * nPct, p1.lat + (p2.lat - p1.lat) * nPct]));
+                snappedAngle = (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180);
+            }
+            const threshold = 0.005, deadzone = 0.003;
+            const distFromStart = turf.distance(turf.point([p1.lon, p1.lat]), pt);
+            const totalDist = turf.distance(turf.point([p1.lon, p1.lat]), turf.point([p2.lon, p2.lat]));
+            let currentDist = Math.min(distFromStart, totalDist - distFromStart);
+            if (currentDist < deadzone || isCriticalSection(p1.name, p2.name)) return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
+            else if (currentDist < threshold) {
+                const w = 1.0 - (currentDist - deadzone) / (threshold - deadzone);
+                return { lng: snappedLng + (lerpLng - snappedLng) * w, lat: snappedLat + (lerpLat - snappedLat) * w, angle: snappedAngle + (straightAngle - snappedAngle) * w };
+            }
+            return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
+        }
+
+        // --- 4. アニメーション関数 ---
         function animate() {
             const now = new Date();
             if (dateEl) {
@@ -263,7 +293,6 @@ async function initSubway() {
             const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
             const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
             
-            // 地面サークルの半径更新
             const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
             const stopFeats = [];
             stopMap.forEach((val) => {
@@ -285,6 +314,8 @@ async function initSubway() {
                     if (s >= c.sec && s < n.sec) {
                         const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
                         if (!p1 || !p2) continue;
+                        
+                        // ReferenceError の原因だった getHybridPos を呼び出す場所
                         const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
                         const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
                         const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
@@ -303,10 +334,9 @@ async function initSubway() {
             requestAnimationFrame(animate);
         }
 
-        animate(); // ループ開始
+        animate();
 
     } catch (e) { 
-        console.error(e); // ← これが抜けていたのがエラーの原因です
+        console.error(e); 
     }
 }
-
