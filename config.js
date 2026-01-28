@@ -13,8 +13,8 @@ const CONFIG = {
         STOP_DURATION: 20
     },
     STATION: {
-    RADIUS: 2,     // 基準となる半径
-    STROKE: 1.5    // 枠線の太さ
+    RADIUS: 12,     // 基準となる半径
+    STROKE: 2    // 枠線の太さ
 },
     CITY: {
         FLOAT_HEIGHT: 30,
@@ -22,6 +22,7 @@ const CONFIG = {
     }
 
 };
+
 
 
 
