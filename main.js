@@ -10,7 +10,7 @@ const map = new mapboxgl.Map({
     antialias: true
 });
 
-// 南北線の駅別高度設定
+// ★南北線の駅別高度設定
 const STATION_ALTITUDE = {
     "南平岸": 25, "澄川": 25, "自衛隊前": 25, "真駒内": 25
 };
@@ -91,16 +91,16 @@ async function initSubway() {
             if (c.length >= 3) tripToRoute.set(c[2].trim(), c[0].trim());
         });
 
+        // 1. 各ソースの追加
         map.addSource('rail', { type: 'geojson', data: subGeo });
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-// --- 3D空中線路（シェルター）の生成ロジック ---
+        // --- 3D空中線路（シェルター）の生成ロジック ---
         const shelterFeatures = [];
         const segmentLength = 0.02; // 約20mごとに分割して滑らかな坂を作る
 
         subGeo.features.forEach(feature => {
-            // 南北線のみを対象にする（geojsonのプロパティを確認）
             if (feature.properties.route_name?.includes("南北線") || feature.properties.colour?.toLowerCase() === "#00ad52") {
                 const line = feature.geometry.coordinates;
                 const turfLine = turf.lineString(line);
@@ -110,19 +110,19 @@ async function initSubway() {
                     const start = turf.along(turfLine, d);
                     const end = turf.along(turfLine, Math.min(d + segmentLength, totalDist));
                     
-                    // 各地点での高度を計算するための補助関数的な処理
                     const getAltByName = (pt) => {
                         const nearestStop = turf.nearestPoint(pt, { type: 'FeatureCollection', features: stopFeatures });
                         const sName = nearestStop.properties.name;
-                        // 南平岸〜真駒内は25m、それ以外は0m
-                        return STATION_ALTITUDE[sName] || 0;
+                        for (const key in STATION_ALTITUDE) {
+                            if (sName.includes(key)) return STATION_ALTITUDE[key];
+                        }
+                        return 0;
                     };
 
                     const altStart = getAltByName(start);
                     const altEnd = getAltByName(end);
                     const midAlt = (altStart + altEnd) / 2;
 
-                    // 線路の幅を持たせたポリゴン（板）を作成
                     const offsetStart = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.005, {units: 'kilometers'});
                     const offsetEnd = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.005, {units: 'kilometers'});
                     
@@ -136,83 +136,53 @@ async function initSubway() {
 
                     shelterFeatures.push({
                         type: 'Feature',
-                        properties: {
-                            h_base: midAlt + 0.1, // 電車の直下に配置
-                            h_top: midAlt + 0.4,  // 少しだけ厚みを持たせる
-                            color: feature.properties.colour || "#00ad52"
-                        },
+                        properties: { h_base: midAlt + 0.1, h_top: midAlt + 0.3, color: feature.properties.colour || "#00ad52" },
                         geometry: { type: 'Polygon', coordinates: [coords] }
                     });
                 }
             }
         });
-
         map.addSource('shelter-source', { type: 'geojson', data: { type: 'FeatureCollection', features: shelterFeatures } });
 
-        map.addLayer({
-            'id': 'shelter-layer',
-            'type': 'fill-extrusion',
-            'source': 'shelter-source',
-            'paint': {
-                'fill-extrusion-color': ['get', 'color'],
-                'fill-extrusion-base': ['get', 'h_base'],
-                'fill-extrusion-height': ['get', 'h_top'],
-                'fill-extrusion-opacity': 0.8
-            }
-        });
-        
+        // 2. 各レイヤーの追加 (順番に注意)
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
-        
-        // ★駅サークル（3D）
         map.addLayer({ 'id': 'stop-circles-3d', 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#cccccc', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.5 } });
         
-// ★修正：枠線を太く見せるため、少しずらしたレイヤーを複数重ねる裏技
-        // これにより、高架駅でも空中に浮いたまま、擬似的に太い枠線に見せることができます。
-        const outlineThickness = 3; // ★この数字を増やすともっと太くなります（例: 2〜5推奨）
-
+        // 太い黒枠レイヤー
+        const outlineThickness = 3;
         for (let i = 0; i < outlineThickness; i++) {
-            // ずらす方向を計算（右下、左上などに少しずつ散らす）
-            const xOffset = (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2);
-            const yOffset = (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2);
-
+            const xOffset = (i % 2 === 0 ? 0.8 : -0.8) * Math.ceil(i / 2);
+            const yOffset = (i % 2 === 0 ? 0.8 : -0.8) * Math.ceil(i / 2);
             map.addLayer({ 
-                'id': `stop-circles-outline-${i}`, // IDをユニークにする
+                'id': `stop-circles-outline-${i}`, 
                 'type': 'fill-extrusion', 
                 'source': 'stops-source', 
                 'paint': { 
-                    'fill-extrusion-color': '#000000', 
-                    'fill-extrusion-base': ['get', 'h_base'], 
-                    'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05],
-                    'fill-extrusion-opacity': 0.9,
-                    // ★ここがポイント：描画位置をわずかにずらす
-                    'fill-extrusion-translate': [xOffset, yOffset],
-                    'fill-extrusion-translate-anchor': 'viewport'
+                    'fill-extrusion-color': '#000000', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05], 'fill-extrusion-opacity': 0.9,
+                    'fill-extrusion-translate': [xOffset, yOffset], 'fill-extrusion-translate-anchor': 'viewport'
                 } 
-            }, 'tr-layer'); // 電車よりは下に描画する
+            });
         }
-        // （元の 'stop-circles-outline' レイヤー定義は削除またはコメントアウトしてください）
 
-        // ★駅名ラベル（高架駅の場合、空中にあるように見えるようオフセット調整）
         map.addLayer({ 
-            'id': 'stop-labels', 
-            'type': 'symbol', 
-            'source': 'stops-source', 
+            'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 
             'layout': { 
-                'text-field': ['get', 'name'], 
-                'text-size': 11, 
-                // 高架駅(h_base=25)の場合は上方向に大きくずらす（簡易的な3D表現）
-                'text-offset': [
-                    'case',
-                    ['==', ['get', 'h_base'], 25], ['literal', [0, -4.5]], 
-                    ['literal', [0, 1.5]]
-                ],
-                'text-anchor': 'top' 
+                'text-field': ['get', 'name'], 'text-size': 11, 'text-anchor': 'top',
+                'text-offset': ['case', ['==', ['get', 'h_base'], 25], ['literal', [0, -4.5]], ['literal', [0, 1.5]]]
             }, 
             'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } 
         });
 
+        // 先に電車レイヤーを作る
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
 
+        // その後にシェルターを電車の下に差し込む
+        map.addLayer({
+            'id': 'shelter-layer', 'type': 'fill-extrusion', 'source': 'shelter-source',
+            'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.8 }
+        }, 'tr-layer');
+
+        // --- 運行データの準備 ---
         const activeTrips = new Map(), allStopTimes = new Map();
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
         stT.split('\n').forEach(line => {
@@ -313,7 +283,6 @@ async function initSubway() {
             const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
             const stopFeats = [];
             stopMap.forEach((val) => {
-                // 名前による高度判定
                 let alt = 0;
                 for (const key in STATION_ALTITUDE) {
                     if (val.name.includes(key)) { alt = STATION_ALTITUDE[key]; break; }
@@ -341,7 +310,6 @@ async function initSubway() {
                         const elapsed = s - (c.sec + CONFIG.TRAIN.STOP_DURATION);
                         const pct = Math.max(0, Math.min(1.0, elapsed / Math.max(1, travelTime)));
                         
-                        // 高度計算
                         let alt1 = 0, alt2 = 0;
                         for (const key in STATION_ALTITUDE) {
                             if (p1.name.includes(key)) alt1 = STATION_ALTITUDE[key];
@@ -380,6 +348,3 @@ async function initSubway() {
         animate();
     } catch (e) { console.error(e); }
 }
-
-
-
