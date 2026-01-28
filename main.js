@@ -144,21 +144,18 @@ async function initSubway() {
         map.addSource('rail', { type: 'geojson', data: subGeo });
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
         
-        // 駅の描画
-        map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: stopFeatures } });
-        map.addLayer({ 
-    'id': 'stop-circles', 
-    'type': 'circle', 
-    'source': 'stops-source', 
-    'paint': { 
-        // 半径は後で animate で動かすので、初期値を設定
-        'circle-radius': CONFIG.STATION.RADIUS, 
-        // 中身を透明にする
-        'circle-color': 'rgba(0,0,0,0)', 
-        // 枠線を黒にする
-        'circle-stroke-color': '#000000', 
-        'circle-stroke-width': CONFIG.STATION.STROKE 
-    } 
+     // 駅の3Dサークル（地面に張り付く薄い円柱）
+map.addLayer({
+    'id': 'stop-circles-3d',
+    'type': 'fill-extrusion',
+    'source': 'stops-source',
+    'paint': {
+        // Mini Tokyo 3D風の薄いグレー。透過させて線路を見せる
+        'fill-extrusion-color': '#cccccc',
+        'fill-extrusion-base': 0,
+        'fill-extrusion-height': 0.1, // 地面に張り付く薄さ
+        'fill-extrusion-opacity': 0.5
+    }
 });
         map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-offset': [0, 1.5], 'text-anchor': 'top' }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
 
@@ -254,22 +251,39 @@ function animate() {
     clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
     
     const z = map.getZoom();
-    const center = map.getCenter();
+const center = map.getCenter();
 
-    // ★横方向の縮みを補正する係数（札幌なら約1.37倍に引き伸ばす）
-    const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
+// ★ 緯度補正：横向きでも比率を維持
+const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
 
-    const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
-    
-    // --- 駅のサークルを巨大化させる処理を追加 ---
-    if (map.getLayer('stop-circles')) {
-        map.setPaintProperty('stop-circles', 'circle-radius', CONFIG.STATION.RADIUS * scale);
-        map.setPaintProperty('stop-circles', 'circle-stroke-width', CONFIG.STATION.STROKE * (scale > 1 ? Math.sqrt(scale) : 1));
-    }
-    const hScale = scale; // ズームアウトしても「かまぼこ板」にならないよう高さを連動
+// スケール計算（1回にまとめます）
+const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
 
-    const L = CONFIG.TRAIN.LENGTH * scale;
-    const W = CONFIG.TRAIN.WIDTH * scale;
+// --- 駅のサークルを更新 ---
+// 電車の長さ (L) に合わせてサークルの半径（メートル）を計算
+// ここを調整することで、常に電車をすっぽり覆うサイズになります
+const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
+
+const stopFeatures = [];
+stopMap.forEach((val) => {
+    // Turfを使って地面に張り付く円を作成
+    const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, {
+        units: 'meters',
+        steps: 32
+    });
+    stopFeatures.push(circle);
+});
+
+if (map.getSource('stops-source')) {
+    map.getSource('stops-source').setData({
+        type: 'FeatureCollection',
+        features: stopFeatures
+    });
+}
+
+const hScale = scale; // 高さも連動
+const L = CONFIG.TRAIN.LENGTH * scale;
+const W = CONFIG.TRAIN.WIDTH * scale;
 
     const feats = [];
     
@@ -314,5 +328,6 @@ function animate() {
 animate();
     } catch (e) { console.error(e); }
 } // ← ここを閉じ忘れていたのがエラーの原因でした
+
 
 
