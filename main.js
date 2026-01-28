@@ -207,20 +207,44 @@ async function initSubway() {
         });
 
         // --- 2. クリックイベントの実装（Mini Tokyo 3D風） ---
-        map.on('click', 'tr-layer', (e) => {
-            const f = e.features[0];
-            const tid = f.properties.tid;
-            const rid = tripToRoute.get(tid);
-            const info = routeData.get(rid);
+// main.js の map.on('click', 'tr-layer', ...) 内を修正
+map.on('click', 'tr-layer', (e) => {
+    const f = e.features[0];
+    const tid = f.properties.tid;
+    const rid = tripToRoute.get(tid);
+    const info = routeData.get(rid);
 
-            // ① 吹き出しポップアップ（追尾なし）
-            new mapboxgl.Popup()
-                .setLngLat(e.lngLat)
-                .setHTML(`<div style="border-left: 5px solid ${f.properties.color}; padding-left: 8px;">
-                            <strong style="font-size:14px;">${info.name}</strong><br>
-                            <span style="color:#666; font-size:12px;">運行ID: ${tid}</span>
-                          </div>`)
-                .addTo(map);
+    const panel = document.getElementById('panel');
+    const titleEl = document.getElementById('panel-title');
+    const timetableEl = document.getElementById('timetable');
+
+    // ★ タイトル部分を書き換え (IDを消し、色棒と路線名を入れる)
+    // 棒の色は info.color (例: #008000 など) をそのまま使います
+    titleEl.innerHTML = `
+        <div class="line-strip" style="background-color: ${info.color};"></div>
+        <span>${info.name}</span>
+    `;
+
+    timetableEl.innerHTML = '';
+    const stops = allStopTimes.get(tid) || [];
+    stops.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'station-item';
+        item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
+        timetableEl.appendChild(item);
+    });
+
+    panel.classList.add('active');
+
+    // ポップアップも同様に少し整理
+    new mapboxgl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(`<div style="display:flex; align-items:center; padding: 5px;">
+                    <div style="width:4px; height:18px; background:${info.color}; margin-right:8px;"></div>
+                    <strong>${info.name}</strong>
+                  </div>`)
+        .addTo(map);
+});
 
             // ② 詳細パネル（時刻表）を表示
             const panel = document.getElementById('panel');
@@ -338,4 +362,5 @@ async function initSubway() {
 
     } catch (e) { console.error(e); }
 }
+
 
