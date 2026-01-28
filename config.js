@@ -12,12 +12,17 @@ const CONFIG = {
         OPACITY: 0.7,     // 電車の透明度
         STOP_DURATION: 20
     },
+    STATION: {
+    RADIUS: 2,     // 基準となる半径
+    STROKE: 1.5    // 枠線の太さ
+},
     CITY: {
         FLOAT_HEIGHT: 30,
         OPACITY: 0.4      // ★建物の透明度（0.2から0.4へ変更。形が見えやすくなります）
     }
 
 };
+
 
 
 
