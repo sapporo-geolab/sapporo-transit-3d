@@ -100,18 +100,31 @@ async function initSubway() {
         // ★駅サークル（3D）
         map.addLayer({ 'id': 'stop-circles-3d', 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#cccccc', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.5 } });
         
-   // 駅サークルの枠線を黒くし、高度に対応させる
-map.addLayer({ 
-    'id': 'stop-circles-outline', 
-    'type': 'fill-extrusion', 
-    'source': 'stops-source', 
-    'paint': { 
-        'fill-extrusion-color': '#000000', // ここで黒色を指定
-        'fill-extrusion-base': ['get', 'h_base'], // 駅の高度に合わせる
-        'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05], // 5cmだけ厚みを出して重なりを防ぐ
-        'fill-extrusion-opacity': 0.9
-    } 
-});
+// ★修正：枠線を太く見せるため、少しずらしたレイヤーを複数重ねる裏技
+        // これにより、高架駅でも空中に浮いたまま、擬似的に太い枠線に見せることができます。
+        const outlineThickness = 3; // ★この数字を増やすともっと太くなります（例: 2〜5推奨）
+
+        for (let i = 0; i < outlineThickness; i++) {
+            // ずらす方向を計算（右下、左上などに少しずつ散らす）
+            const xOffset = (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2);
+            const yOffset = (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2);
+
+            map.addLayer({ 
+                'id': `stop-circles-outline-${i}`, // IDをユニークにする
+                'type': 'fill-extrusion', 
+                'source': 'stops-source', 
+                'paint': { 
+                    'fill-extrusion-color': '#000000', 
+                    'fill-extrusion-base': ['get', 'h_base'], 
+                    'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05],
+                    'fill-extrusion-opacity': 0.9,
+                    // ★ここがポイント：描画位置をわずかにずらす
+                    'fill-extrusion-translate': [xOffset, yOffset],
+                    'fill-extrusion-translate-anchor': 'viewport'
+                } 
+            }, 'tr-layer'); // 電車よりは下に描画する
+        }
+        // （元の 'stop-circles-outline' レイヤー定義は削除またはコメントアウトしてください）
 
         // ★駅名ラベル（高架駅の場合、空中にあるように見えるようオフセット調整）
         map.addLayer({ 
@@ -301,4 +314,5 @@ map.addLayer({
         animate();
     } catch (e) { console.error(e); }
 }
+
 
