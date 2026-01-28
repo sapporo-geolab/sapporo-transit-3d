@@ -88,7 +88,6 @@ async function initSubway() {
     const clockEl = document.getElementById('clock');
     const trainCountEl = document.getElementById('train-count');
 
-    // ★ ポップアップと選択IDを管理する変数
     let selectedTid = null;
     let activePopup = null;
 
@@ -116,7 +115,6 @@ async function initSubway() {
         routesT.split('\n').forEach(line => {
             const c = line.replace(/"/g, "").split(',');
             if (c.length < 7) return;
-            // ★ routes.txt の 4列目(index 3) から路線名を取得
             const rName = c[3].split('（')[0].trim();
             routeData.set(c[0].trim(), { color: "#" + c[6].trim().toLowerCase(), name: rName });
         });
@@ -127,12 +125,10 @@ async function initSubway() {
             if (c.length >= 3) tripToRoute.set(c[2].trim(), c[0].trim());
         });
 
-        // --- データの登録 ---
         map.addSource('rail', { type: 'geojson', data: subGeo });
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: stopFeatures } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-        // --- レイヤーの追加 ---
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
         
         map.addLayer({
@@ -172,7 +168,6 @@ async function initSubway() {
 
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
 
-        // --- 1. 運行・時刻表データの準備 ---
         const activeTrips = new Map();
         const allStopTimes = new Map(); 
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
@@ -189,19 +184,16 @@ async function initSubway() {
 
             const t = c[1].split(':'), sec = (parseInt(t[0])||0)*3600 + (parseInt(t[1])||0)*60 + (parseInt(t[2])||0);
             if (!activeTrips.has(tid)) activeTrips.set(tid, []);
-            // ★ activeTrips に時刻情報(time)も保存するように拡張
             activeTrips.get(tid).push({ sec, sid, time: arrivalTime });
 
             if (!allStopTimes.has(tid)) allStopTimes.set(tid, []);
             allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
         });
 
-        // --- 2. クリックイベント ---
         map.on('click', 'tr-layer', (e) => {
             const f = e.features[0];
             selectedTid = f.properties.tid;
             const rid = tripToRoute.get(selectedTid);
-            
             const info = routeData.get(rid) || { 
                 name: selectedTid.includes("N") ? "南北線" : (selectedTid.includes("T") ? "東西線" : "東豊線"), 
                 color: f.properties.color || "#666" 
@@ -211,16 +203,20 @@ async function initSubway() {
             const titleEl = document.getElementById('panel-title');
             const timetableEl = document.getElementById('timetable');
 
-            // パネルタイトルの構築
             titleEl.innerHTML = `
                 <div class="line-strip" style="background-color: ${info.color};"></div>
                 <span>${info.name}</span>
             `;
 
-            timetableEl.innerHTML = '';
+            // インジケーター（進行線と点）を初期化
+            timetableEl.innerHTML = `
+                <div id="progress-line"></div>
+                <div id="pulsating-dot"></div>
+            `;
+            
             const stops = allStopTimes.get(selectedTid) || [];
             if (stops.length === 0) {
-                timetableEl.innerHTML = '<div style="padding:20px; color:#666;">時刻表データが見つかりません</div>';
+                timetableEl.innerHTML += '<div style="padding:20px; color:#666;">時刻表データが見つかりません</div>';
             } else {
                 stops.forEach(s => {
                     const item = document.createElement('div');
@@ -230,9 +226,16 @@ async function initSubway() {
                 });
             }
 
+            const dot = document.getElementById('pulsating-dot');
+            const line = document.getElementById('progress-line');
+            if(dot) dot.style.display = 'block';
+            if(line) {
+                line.style.backgroundColor = info.color;
+                line.style.height = '0px';
+            }
+
             panel.classList.add('active');
 
-            // ★ 新規ポップアップ作成（追尾用）
             if (activePopup) activePopup.remove();
             activePopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 20 })
                 .setLngLat(e.lngLat)
@@ -240,7 +243,6 @@ async function initSubway() {
                 .addTo(map);
         });
 
-        // ★ 地図の何もないところをクリックした時に解除
         map.on('click', (e) => {
             const features = map.queryRenderedFeatures(e.point, { layers: ['tr-layer'] });
             if (!features.length) {
@@ -254,7 +256,6 @@ async function initSubway() {
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        // --- 3. 補助関数 ---
         function isCriticalSection(n1, n2) {
             const pairs = [["さっぽろ", "大通"], ["大通", "すすきの"], ["大通", "豊水すすきの"], ["大通", "西１１丁目"], ["大通", "西11丁目"], ["大通", "バスセンター前"]];
             return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
@@ -289,7 +290,6 @@ async function initSubway() {
             return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
         }
 
-// --- 4. アニメーション関数（電車の到着・停車・発車ロジックを修正） ---
         function animate() {
             const now = new Date();
             if (dateEl) {
@@ -325,19 +325,15 @@ async function initSubway() {
                         const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
                         if (!p1 || !p2) continue;
                         
-                        // ★修正：データ上の時刻 (c.sec) を到着時間とし、そこから STOP_DURATION 秒間は移動させない
-                        // 次の駅までの純粋な走行時間を算出
+                        // ★修正：データ上の時刻を到着時間とし、そこから停車時間を考慮した進捗率(pct)を計算
                         const travelTime = (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION;
-                        // 現在時刻から「到着時刻 + 停車時間」を引いた経過時間を算出
                         const elapsed = s - (c.sec + CONFIG.TRAIN.STOP_DURATION);
-                        // 走行開始前は 0、駅間走行中は 0〜1、次駅到着時は 1 になるように計算
                         const pct = Math.max(0, Math.min(1.0, elapsed / Math.max(1, travelTime)));
                         
                         const pos = getHybridPos(p1, p2, pct);
                         const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
                         const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
                         
-                        // 選択された電車を動的に追尾（表示内容はご要望通り維持）
                         if (tid === selectedTid && activePopup) {
                             activePopup.setLngLat([pos.lng, pos.lat]);
                             const isStopped = (s - c.sec) < CONFIG.TRAIN.STOP_DURATION;
@@ -357,6 +353,18 @@ async function initSubway() {
                             
                             const popupDiv = document.getElementById('popup-dynamic-content');
                             if (popupDiv) popupDiv.parentElement.innerHTML = content;
+
+                            // ★パネル内の現在地インジケーター（点と線）を更新
+                            const dot = document.getElementById('pulsating-dot');
+                            const line = document.getElementById('progress-line');
+                            if (dot && line) {
+                                const itemHeight = 45; // style.cssの固定高さ
+                                const offset = 32;     // 最初の駅の丸の中心
+                                const currentTop = (i * itemHeight) + (pct * itemHeight) + offset;
+                                dot.style.top = `${currentTop - 6}px`;
+                                line.style.height = `${currentTop - offset}px`;
+                                dot.style.display = 'block';
+                            }
                         }
 
                         trainFeats.push({ 
@@ -379,4 +387,3 @@ async function initSubway() {
         console.error(e); 
     }
 }
-
