@@ -204,42 +204,53 @@ async function initSubway() {
             allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
         });
 
-        // --- 2. クリックイベント（中央パネル & 路線カラー棒） ---
-        map.on('click', 'tr-layer', (e) => {
-            const f = e.features[0];
-            const tid = f.properties.tid;
-            const rid = tripToRoute.get(tid);
-            const info = routeData.get(rid);
-            if (!info) return;
+map.on('click', 'tr-layer', (e) => {
+    const f = e.features[0];
+    const tid = f.properties.tid;
+    const rid = tripToRoute.get(tid);
+    
+    // 路線情報の取得（取得できない場合のフォールバック付き）
+    const info = routeData.get(rid) || { 
+        name: tid.includes("N") ? "南北線" : (tid.includes("T") ? "東西線" : "東豊線"), 
+        color: f.properties.color || "#666" 
+    };
 
-            const panel = document.getElementById('panel');
-            const titleEl = document.getElementById('panel-title');
-            const timetableEl = document.getElementById('timetable');
+    const panel = document.getElementById('panel');
+    const titleEl = document.getElementById('panel-title');
+    const timetableEl = document.getElementById('timetable');
 
-            titleEl.innerHTML = `
-                <div class="line-strip" style="background-color: ${info.color};"></div>
-                <span>${info.name}</span>
-            `;
+    // パネルタイトルの構築
+    titleEl.innerHTML = `
+        <div class="line-strip" style="background-color: ${info.color};"></div>
+        <span>${info.name}</span>
+    `;
 
-            timetableEl.innerHTML = '';
-            const stops = allStopTimes.get(tid) || [];
-            stops.forEach(s => {
-                const item = document.createElement('div');
-                item.className = 'station-item';
-                item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
-                timetableEl.appendChild(item);
-            });
-
-            panel.classList.add('active');
-
-            new mapboxgl.Popup()
-                .setLngLat(e.lngLat)
-                .setHTML(`<div style="display:flex; align-items:center; padding: 5px; font-weight: bold;">
-                            <div style="width:4px; height:18px; background:${info.color}; margin-right:8px;"></div>
-                            ${info.name}
-                          </div>`)
-                .addTo(map);
+    timetableEl.innerHTML = '';
+    const stops = allStopTimes.get(tid) || [];
+    if (stops.length === 0) {
+        timetableEl.innerHTML = '<div style="padding:20px; color:#666;">時刻表データが見つかりません</div>';
+    } else {
+        stops.forEach(s => {
+            const item = document.createElement('div');
+            item.className = 'station-item';
+            item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
+            timetableEl.appendChild(item);
         });
+    }
+
+    // パネルを表示
+    panel.classList.add('active');
+
+    // 吹き出し（ポップアップ）の内容を修正
+    new mapboxgl.Popup({ closeButton: false }) // Mini Tokyo風に×ボタンなし
+        .setLngLat(e.lngLat)
+        .setHTML(`
+            <div style="display:flex; align-items:center; padding: 4px 8px; font-weight: bold; color: #333;">
+                <div style="width:4px; height:16px; background:${info.color}; margin-right:10px; border-radius:2px;"></div>
+                ${info.name}
+            </div>`)
+        .addTo(map);
+});
 
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
@@ -340,3 +351,4 @@ async function initSubway() {
         console.error(e); 
     }
 }
+
