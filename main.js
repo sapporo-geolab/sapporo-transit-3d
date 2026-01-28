@@ -10,7 +10,7 @@ const map = new mapboxgl.Map({
     antialias: true
 });
 
-// ★判定を「駅名」に変更。stops.txtにある駅名と一致させてください
+// 南北線の駅別高度設定
 const STATION_ALTITUDE = {
     "南平岸": 25, "澄川": 25, "自衛隊前": 25, "真駒内": 25
 };
@@ -96,9 +96,42 @@ async function initSubway() {
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
+        
+        // ★駅サークル（3D）
         map.addLayer({ 'id': 'stop-circles-3d', 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#cccccc', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.5 } });
-        map.addLayer({ 'id': 'stop-circles-outline', 'type': 'line', 'source': 'stops-source', 'paint': { 'line-color': '#000000', 'line-width': 2 } });
-        map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-offset': [0, 1.5], 'text-anchor': 'top' }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
+        
+        // ★駅サークルの枠線（高架対応のため Line から Fill-Extrusion に変更）
+        map.addLayer({ 
+            'id': 'stop-circles-outline', 
+            'type': 'fill-extrusion', 
+            'source': 'stops-source', 
+            'paint': { 
+                'fill-extrusion-color': '#000000', 
+                'fill-extrusion-base': ['get', 'h_base'], 
+                'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05],
+                'fill-extrusion-opacity': 0.8
+            } 
+        });
+
+        // ★駅名ラベル（高架駅の場合、空中にあるように見えるようオフセット調整）
+        map.addLayer({ 
+            'id': 'stop-labels', 
+            'type': 'symbol', 
+            'source': 'stops-source', 
+            'layout': { 
+                'text-field': ['get', 'name'], 
+                'text-size': 11, 
+                // 高架駅(h_base=25)の場合は上方向に大きくずらす（簡易的な3D表現）
+                'text-offset': [
+                    'case',
+                    ['==', ['get', 'h_base'], 25], ['literal', [0, -4.5]], 
+                    ['literal', [0, 1.5]]
+                ],
+                'text-anchor': 'top' 
+            }, 
+            'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } 
+        });
+
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
 
         const activeTrips = new Map(), allStopTimes = new Map();
@@ -201,8 +234,11 @@ async function initSubway() {
             const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
             const stopFeats = [];
             stopMap.forEach((val) => {
-                // ★IDではなく「駅名」で高度を判定
-                const alt = STATION_ALTITUDE[val.name] || 0;
+                // 名前による高度判定
+                let alt = 0;
+                for (const key in STATION_ALTITUDE) {
+                    if (val.name.includes(key)) { alt = STATION_ALTITUDE[key]; break; }
+                }
                 const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, { units: 'meters', steps: 32, properties: { name: val.name, h_base: alt, h_top: alt + 0.1 } });
                 stopFeats.push(circle);
             });
@@ -226,9 +262,12 @@ async function initSubway() {
                         const elapsed = s - (c.sec + CONFIG.TRAIN.STOP_DURATION);
                         const pct = Math.max(0, Math.min(1.0, elapsed / Math.max(1, travelTime)));
                         
-                        // ★「駅名」による高度補完計算
-                        const alt1 = STATION_ALTITUDE[p1.name] || 0;
-                        const alt2 = STATION_ALTITUDE[p2.name] || 0;
+                        // 高度計算
+                        let alt1 = 0, alt2 = 0;
+                        for (const key in STATION_ALTITUDE) {
+                            if (p1.name.includes(key)) alt1 = STATION_ALTITUDE[key];
+                            if (p2.name.includes(key)) alt2 = STATION_ALTITUDE[key];
+                        }
                         const currentAlt = alt1 + (alt2 - alt1) * pct;
 
                         const pos = getHybridPos(p1, p2, pct);
@@ -248,11 +287,7 @@ async function initSubway() {
 
                         trainFeats.push({ 
                             type: 'Feature', 
-                            properties: { 
-                                tid: tid, color: info.color, 
-                                h_base: hBaseLayer + currentAlt, 
-                                h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * hScale) 
-                            }, 
+                            properties: { tid: tid, color: info.color, h_base: hBaseLayer + currentAlt, h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * hScale) }, 
                             geometry: { type: 'Polygon', coordinates: [corners] } 
                         });
                         break;
