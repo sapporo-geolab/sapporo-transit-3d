@@ -95,6 +95,72 @@ async function initSubway() {
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
+// --- 3D空中線路（シェルター）の生成ロジック ---
+        const shelterFeatures = [];
+        const segmentLength = 0.02; // 約20mごとに分割して滑らかな坂を作る
+
+        subGeo.features.forEach(feature => {
+            // 南北線のみを対象にする（geojsonのプロパティを確認）
+            if (feature.properties.route_name?.includes("南北線") || feature.properties.colour?.toLowerCase() === "#00ad52") {
+                const line = feature.geometry.coordinates;
+                const turfLine = turf.lineString(line);
+                const totalDist = turf.length(turfLine);
+
+                for (let d = 0; d < totalDist; d += segmentLength) {
+                    const start = turf.along(turfLine, d);
+                    const end = turf.along(turfLine, Math.min(d + segmentLength, totalDist));
+                    
+                    // 各地点での高度を計算するための補助関数的な処理
+                    const getAltByName = (pt) => {
+                        const nearestStop = turf.nearestPoint(pt, { type: 'FeatureCollection', features: stopFeatures });
+                        const sName = nearestStop.properties.name;
+                        // 南平岸〜真駒内は25m、それ以外は0m
+                        return STATION_ALTITUDE[sName] || 0;
+                    };
+
+                    const altStart = getAltByName(start);
+                    const altEnd = getAltByName(end);
+                    const midAlt = (altStart + altEnd) / 2;
+
+                    // 線路の幅を持たせたポリゴン（板）を作成
+                    const offsetStart = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.005, {units: 'kilometers'});
+                    const offsetEnd = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.005, {units: 'kilometers'});
+                    
+                    const coords = [
+                        offsetStart.geometry.coordinates[0],
+                        offsetStart.geometry.coordinates[1],
+                        offsetEnd.geometry.coordinates[1],
+                        offsetEnd.geometry.coordinates[0],
+                        offsetStart.geometry.coordinates[0]
+                    ];
+
+                    shelterFeatures.push({
+                        type: 'Feature',
+                        properties: {
+                            h_base: midAlt + 0.1, // 電車の直下に配置
+                            h_top: midAlt + 0.4,  // 少しだけ厚みを持たせる
+                            color: feature.properties.colour || "#00ad52"
+                        },
+                        geometry: { type: 'Polygon', coordinates: [coords] }
+                    });
+                }
+            }
+        });
+
+        map.addSource('shelter-source', { type: 'geojson', data: { type: 'FeatureCollection', features: shelterFeatures } });
+
+        map.addLayer({
+            'id': 'shelter-layer',
+            'type': 'fill-extrusion',
+            'source': 'shelter-source',
+            'paint': {
+                'fill-extrusion-color': ['get', 'color'],
+                'fill-extrusion-base': ['get', 'h_base'],
+                'fill-extrusion-height': ['get', 'h_top'],
+                'fill-extrusion-opacity': 0.8
+            }
+        });
+        
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
         
         // ★駅サークル（3D）
@@ -314,5 +380,6 @@ async function initSubway() {
         animate();
     } catch (e) { console.error(e); }
 }
+
 
 
