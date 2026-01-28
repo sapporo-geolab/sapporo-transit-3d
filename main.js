@@ -10,7 +10,7 @@ const map = new mapboxgl.Map({
     antialias: true
 });
 
-// ★南北線の駅別高度設定
+// 高度設定：名前ベース
 const STATION_ALTITUDE = {
     "南平岸": 25, "澄川": 25, "自衛隊前": 25, "真駒内": 25
 };
@@ -91,52 +91,47 @@ async function initSubway() {
             if (c.length >= 3) tripToRoute.set(c[2].trim(), c[0].trim());
         });
 
-        // 1. 各ソースの追加
         map.addSource('rail', { type: 'geojson', data: subGeo });
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-        // --- 3D空中線路（シェルター）の生成ロジック ---
+        // --- 3D空中線路生成：GeoJSONプロパティ対応版 ---
         const shelterFeatures = [];
-        const segmentLength = 0.02; // 約20mごとに分割して滑らかな坂を作る
+        const segmentLength = 0.02;
 
         subGeo.features.forEach(feature => {
-            if (feature.properties.route_name?.includes("南北線") || feature.properties.colour?.toLowerCase() === "#00ad52") {
-                const line = feature.geometry.coordinates;
-                const turfLine = turf.lineString(line);
+            if (feature.geometry.type !== "LineString") return;
+            
+            const props = feature.properties;
+            // 色(#008800)または名前で南北線を判定
+            const isNanboku = (props.colour?.toLowerCase() === "#008800") || (props.name?.includes("南北線"));
+
+            if (isNanboku) {
+                const lineCoords = feature.geometry.coordinates;
+                const turfLine = turf.lineString(lineCoords);
                 const totalDist = turf.length(turfLine);
+                const shelterColor = props.colour || "#008800";
 
                 for (let d = 0; d < totalDist; d += segmentLength) {
                     const start = turf.along(turfLine, d);
                     const end = turf.along(turfLine, Math.min(d + segmentLength, totalDist));
                     
-                    const getAltByName = (pt) => {
+                    const getAltByPt = (pt) => {
                         const nearestStop = turf.nearestPoint(pt, { type: 'FeatureCollection', features: stopFeatures });
                         const sName = nearestStop.properties.name;
-                        for (const key in STATION_ALTITUDE) {
-                            if (sName.includes(key)) return STATION_ALTITUDE[key];
-                        }
+                        for (const key in STATION_ALTITUDE) { if (sName.includes(key)) return STATION_ALTITUDE[key]; }
                         return 0;
                     };
 
-                    const altStart = getAltByName(start);
-                    const altEnd = getAltByName(end);
-                    const midAlt = (altStart + altEnd) / 2;
-
+                    const midAlt = (getAltByPt(start) + getAltByPt(end)) / 2;
                     const offsetStart = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.005, {units: 'kilometers'});
                     const offsetEnd = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.005, {units: 'kilometers'});
                     
-                    const coords = [
-                        offsetStart.geometry.coordinates[0],
-                        offsetStart.geometry.coordinates[1],
-                        offsetEnd.geometry.coordinates[1],
-                        offsetEnd.geometry.coordinates[0],
-                        offsetStart.geometry.coordinates[0]
-                    ];
+                    const coords = [offsetStart.geometry.coordinates[0], offsetStart.geometry.coordinates[1], offsetEnd.geometry.coordinates[1], offsetEnd.geometry.coordinates[0], offsetStart.geometry.coordinates[0]];
 
                     shelterFeatures.push({
                         type: 'Feature',
-                        properties: { h_base: midAlt + 0.1, h_top: midAlt + 0.3, color: feature.properties.colour || "#00ad52" },
+                        properties: { h_base: midAlt + 0.1, h_top: midAlt + 0.3, color: shelterColor },
                         geometry: { type: 'Polygon', coordinates: [coords] }
                     });
                 }
@@ -144,45 +139,21 @@ async function initSubway() {
         });
         map.addSource('shelter-source', { type: 'geojson', data: { type: 'FeatureCollection', features: shelterFeatures } });
 
-        // 2. 各レイヤーの追加 (順番に注意)
+        // レイヤー順序：rail -> outline -> circles -> labels -> trains -> shelter
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
         map.addLayer({ 'id': 'stop-circles-3d', 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#cccccc', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.5 } });
         
-        // 太い黒枠レイヤー
-        const outlineThickness = 3;
-        for (let i = 0; i < outlineThickness; i++) {
-            const xOffset = (i % 2 === 0 ? 0.8 : -0.8) * Math.ceil(i / 2);
-            const yOffset = (i % 2 === 0 ? 0.8 : -0.8) * Math.ceil(i / 2);
-            map.addLayer({ 
-                'id': `stop-circles-outline-${i}`, 
-                'type': 'fill-extrusion', 
-                'source': 'stops-source', 
-                'paint': { 
-                    'fill-extrusion-color': '#000000', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05], 'fill-extrusion-opacity': 0.9,
-                    'fill-extrusion-translate': [xOffset, yOffset], 'fill-extrusion-translate-anchor': 'viewport'
-                } 
-            });
+        const thickness = 3;
+        for (let i = 0; i < thickness; i++) {
+            const off = (i % 2 === 0 ? 0.8 : -0.8) * Math.ceil(i / 2);
+            map.addLayer({ 'id': `stop-circles-outline-${i}`, 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#000000', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05], 'fill-extrusion-opacity': 0.9, 'fill-extrusion-translate': [off, off], 'fill-extrusion-translate-anchor': 'viewport' } });
         }
 
-        map.addLayer({ 
-            'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 
-            'layout': { 
-                'text-field': ['get', 'name'], 'text-size': 11, 'text-anchor': 'top',
-                'text-offset': ['case', ['==', ['get', 'h_base'], 25], ['literal', [0, -4.5]], ['literal', [0, 1.5]]]
-            }, 
-            'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } 
-        });
-
-        // 先に電車レイヤーを作る
+        map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-anchor': 'top', 'text-offset': ['case', ['==', ['get', 'h_base'], 25], ['literal', [0, -4.5]], ['literal', [0, 1.5]]] }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
+        map.addLayer({ 'id': 'shelter-layer', 'type': 'fill-extrusion', 'source': 'shelter-source', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.8 } }, 'tr-layer');
 
-        // その後にシェルターを電車の下に差し込む
-        map.addLayer({
-            'id': 'shelter-layer', 'type': 'fill-extrusion', 'source': 'shelter-source',
-            'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.8 }
-        }, 'tr-layer');
-
-        // --- 運行データの準備 ---
+        // 運行データ
         const activeTrips = new Map(), allStopTimes = new Map();
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
         stT.split('\n').forEach(line => {
@@ -221,80 +192,48 @@ async function initSubway() {
         });
 
         map.on('click', (e) => {
-            const features = map.queryRenderedFeatures(e.point, { layers: ['tr-layer'] });
-            if (!features.length) {
+            if (!map.queryRenderedFeatures(e.point, { layers: ['tr-layer'] }).length) {
                 selectedTid = null;
                 if (activePopup) { activePopup.remove(); activePopup = null; }
-                const panel = document.getElementById('panel');
-                if (panel) panel.classList.remove('active');
+                document.getElementById('panel').classList.remove('active');
             }
         });
 
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        function isCriticalSection(n1, n2) {
-            const pairs = [["さっぽろ", "大通"], ["大通", "すすきの"], ["大通", "豊水すすきの"], ["大通", "西１１丁目"], ["大通", "西11丁目"], ["大通", "バスセンター前"]];
-            return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
-        }
-
         function getHybridPos(p1, p2, pct) {
             const lerpLng = p1.lon + (p2.lon - p1.lon) * pct, lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
             const pt = turf.point([lerpLng, lerpLat]);
-            const straightAngle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
-            let closestPt = pt, min_dist = Infinity, bestFeature = null;
+            let closestPt = pt, min_dist = Infinity;
             subGeo.features.forEach(f => {
                 try {
                     const snapped = turf.nearestPointOnLine(f, pt);
-                    if (snapped.properties.dist < min_dist) { min_dist = snapped.properties.dist; closestPt = snapped; bestFeature = f; }
+                    if (snapped.properties.dist < min_dist) { min_dist = snapped.properties.dist; closestPt = snapped; }
                 } catch(e) {}
             });
-            let snappedLng = closestPt.geometry.coordinates[0], snappedLat = closestPt.geometry.coordinates[1], snappedAngle = straightAngle;
-            if (bestFeature && min_dist < 0.5) { 
-                const nPct = Math.min(1.0, pct + 0.005);
-                const nSnapped = turf.nearestPointOnLine(bestFeature, turf.point([p1.lon + (p2.lon - p1.lon) * nPct, p1.lat + (p2.lat - p1.lat) * nPct]));
-                snappedAngle = (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180);
-            }
-            const threshold = 0.005, deadzone = 0.003;
-            const distFromStart = turf.distance(turf.point([p1.lon, p1.lat]), pt);
-            const totalDist = turf.distance(turf.point([p1.lon, p1.lat]), turf.point([p2.lon, p2.lat]));
-            let currentDist = Math.min(distFromStart, totalDist - distFromStart);
-            if (currentDist < deadzone || isCriticalSection(p1.name, p2.name)) return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
-            else if (currentDist < threshold) {
-                const w = 1.0 - (currentDist - deadzone) / (threshold - deadzone);
-                return { lng: snappedLng + (lerpLng - snappedLng) * w, lat: snappedLat + (lerpLat - snappedLat) * w, angle: snappedAngle + (straightAngle - snappedAngle) * w };
-            }
-            return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
+            const angle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
+            return { lng: closestPt.geometry.coordinates[0], lat: closestPt.geometry.coordinates[1], angle: angle };
         }
 
         function animate() {
             const now = new Date();
-            if (dateEl) {
-                const y = now.getFullYear(), m = now.getMonth() + 1, d = now.getDate(), w = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
-                dateEl.innerText = `${y}年${m}月${d}日(${w})`; 
-            }
             clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
             const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
             
-            const z = map.getZoom(), center = map.getCenter();
-            const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
-            const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
+            const center = map.getCenter(), latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
+            const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - map.getZoom()))); 
             
-            const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
             const stopFeats = [];
             stopMap.forEach((val) => {
                 let alt = 0;
-                for (const key in STATION_ALTITUDE) {
-                    if (val.name.includes(key)) { alt = STATION_ALTITUDE[key]; break; }
-                }
-                const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, { units: 'meters', steps: 32, properties: { name: val.name, h_base: alt, h_top: alt + 0.1 } });
+                for (const key in STATION_ALTITUDE) { if (val.name.includes(key)) { alt = STATION_ALTITUDE[key]; break; } }
+                const circle = turf.circle([val.lon, val.lat], (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5, { units: 'meters', steps: 32, properties: { name: val.name, h_base: alt, h_top: alt + 0.1 } });
                 stopFeats.push(circle);
             });
             if (map.getSource('stops-source')) map.getSource('stops-source').setData({ type: 'FeatureCollection', features: stopFeats });
 
-            const hScale = scale, L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
             const trainFeats = [];
-
             activeTrips.forEach((stops, tid) => {
                 const rid = tripToRoute.get(tid), info = routeData.get(rid);
                 if (!info) return;
@@ -305,44 +244,29 @@ async function initSubway() {
                     if (s >= c.sec && s < n.sec) {
                         const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
                         if (!p1 || !p2) continue;
-                        
-                        const travelTime = (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION;
-                        const elapsed = s - (c.sec + CONFIG.TRAIN.STOP_DURATION);
-                        const pct = Math.max(0, Math.min(1.0, elapsed / Math.max(1, travelTime)));
+                        const pct = Math.max(0, Math.min(1.0, (s - (c.sec + CONFIG.TRAIN.STOP_DURATION)) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
                         
                         let alt1 = 0, alt2 = 0;
-                        for (const key in STATION_ALTITUDE) {
-                            if (p1.name.includes(key)) alt1 = STATION_ALTITUDE[key];
-                            if (p2.name.includes(key)) alt2 = STATION_ALTITUDE[key];
-                        }
+                        for (const key in STATION_ALTITUDE) { if (p1.name.includes(key)) alt1 = STATION_ALTITUDE[key]; if (p2.name.includes(key)) alt2 = STATION_ALTITUDE[key]; }
                         const currentAlt = alt1 + (alt2 - alt1) * pct;
 
                         const pos = getHybridPos(p1, p2, pct);
-                        const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
+                        const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle), L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
                         const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
                         
                         if (tid === selectedTid && activePopup) {
                             activePopup.setLngLat([pos.lng, pos.lat]);
                             const isStopped = (s - c.sec) < CONFIG.TRAIN.STOP_DURATION;
-                            const statusHtml = isStopped ? `停車：<b>${p1.name}</b> ${c.time}<br>次駅：${p2.name} ${n.time}` : `前駅：${p1.name} ${c.time}<br>次駅：<b>${p2.name}</b> ${n.time}`;
-                            const content = `<div id="popup-dynamic-content" style="display:flex; align-items:center; min-width:140px; font-family:sans-serif;"><div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div><div><div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div><div style="font-size:11px; margin-top:3px; color:#666; line-height:1.4;">${statusHtml}</div></div></div>`;
-                            const popupDiv = document.getElementById('popup-dynamic-content');
-                            if (popupDiv) popupDiv.parentElement.innerHTML = content;
+                            document.getElementById('popup-dynamic-content').parentElement.innerHTML = `<div id="popup-dynamic-content" style="display:flex; align-items:center; min-width:140px;"><div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div><div><div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div><div style="font-size:11px; margin-top:3px; color:#666;">${isStopped ? `停車：<b>${p1.name}</b>` : `前駅：${p1.name}`}<br>次駅：<b>${p2.name}</b> ${n.time}</div></div></div>`;
                             const dot = document.getElementById('pulsating-dot'), line = document.getElementById('progress-line');
-                            if (dot && line) { const itemHeight = 45, offset = 32, currentTop = (i * itemHeight) + (pct * itemHeight) + offset; dot.style.top = `${currentTop - 6}px`; line.style.height = `${currentTop - offset}px`; dot.style.display = 'block'; }
+                            if (dot && line) { const curTop = (i * 45) + (pct * 45) + 32; dot.style.top = `${curTop - 6}px`; line.style.height = `${curTop - 32}px`; dot.style.display = 'block'; }
                         }
-
-                        trainFeats.push({ 
-                            type: 'Feature', 
-                            properties: { tid: tid, color: info.color, h_base: hBaseLayer + currentAlt, h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * hScale) }, 
-                            geometry: { type: 'Polygon', coordinates: [corners] } 
-                        });
+                        trainFeats.push({ type: 'Feature', properties: { tid, color: info.color, h_base: hBaseLayer + currentAlt, h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * scale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
                         break;
                     }
                 }
             });
             if (map.getSource('trains')) map.getSource('trains').setData({ type: 'FeatureCollection', features: trainFeats });
-            trainCountEl.innerText = `${trainFeats.length} trains running`;
             requestAnimationFrame(animate);
         }
         animate();
