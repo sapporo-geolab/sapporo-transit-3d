@@ -11,7 +11,7 @@ const map = new mapboxgl.Map({
 });
 
 map.on('load', async () => {
-    // ベースマップの透明化処理（既存のコードと同じ）
+    // ベースマップの透明化処理
     const layers = map.getStyle().layers;
     layers.forEach(layer => {
         if (layer.id !== 'background') {
@@ -20,80 +20,65 @@ map.on('load', async () => {
             if (layer.type === 'symbol') map.setPaintProperty(layer.id, 'text-opacity', 0);
             if (layer.type === 'circle') map.setPaintProperty(layer.id, 'circle-opacity', 0);
         } else {
-            // 背景が明るい方が良い場合は、ここを '#ffffff' や '#f0f0f0' に変更してください
             map.setPaintProperty('background', 'background-color', '#111111');
         }
     });
 
-    // --- 各レイヤーのベース高さを 0.1m ずつずらして重なりを解消 (Z-fighting防止) ---
+    // 1. 公園レイヤー
+    map.addLayer({
+        'id': 'floating-parks',
+        'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
+        'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
+        'paint': {
+            'fill-extrusion-color': '#ffffff', 
+            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
+            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
+            'fill-extrusion-opacity': 0.4 
+        }
+    });
 
-// 1. 公園レイヤー（白に変更）
-map.addLayer({
-    'id': 'floating-parks',
-    'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
-    'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
-    'paint': {
-        // 白に変更
-        'fill-extrusion-color': '#ffffff', 
-        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
-        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
-        // 道路と区別するため、少しだけ透過させて質感を分ける（0.4）
-        'fill-extrusion-opacity': 0.4 
-    }
-});
+    // 2. 川・水面レイヤー
+    map.addLayer({
+        'id': 'floating-water',
+        'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
+        'paint': {
+            'fill-extrusion-color': '#b0c4de', 
+            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
+            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
+            'fill-extrusion-opacity': 0.3 
+        }
+    });
 
-// 2. 川・水面レイヤー（現状のまま、またはさらに薄く）
-map.addLayer({
-    'id': 'floating-water',
-    'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
-    'paint': {
-        'fill-extrusion-color': '#b0c4de', 
-        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
-        'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-        'fill-extrusion-opacity': 0.3 
-    }
-});
+    // 3. 道路レイヤー
+    map.addLayer({
+        'id': 'floating-roads',
+        'source': 'composite', 'source-layer': 'road', 'type': 'line',
+        'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'street'], true, false],
+        'paint': {
+            'line-color': '#ffffff',
+            'line-width': [
+                'match',
+                ['get', 'class'],
+                ['motorway', 'trunk', 'primary'], 8,
+                ['secondary', 'tertiary'], 4,
+                2
+            ],
+            'line-opacity': 0.6
+        }
+    });
 
-// 3. 道路レイヤー（白に変更、幅の強弱は維持）
-map.addLayer({
-    'id': 'floating-roads',
-    'source': 'composite', 'source-layer': 'road', 'type': 'line',
-    'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'street'], true, false],
-    'paint': {
-        // 白に変更
-        'line-color': '#ffffff',
-        
-        // 道路の種別による太さの描き分け（維持）
-        'line-width': [
-            'match',
-            ['get', 'class'],
-            ['motorway', 'trunk', 'primary'], 8,    // より目立たせるため少し太く (6->8)
-            ['secondary', 'tertiary'], 4,          // (3->4)
-            2                                     // (1.5->2)
-        ],
-        'line-opacity': 0.6 // 地面の黒に対して光って見える程度の透過度
-    }
-});
-
-// 4. 建物レイヤー（35m以下の低い構造物をカットし、不透明な白に戻す）
-map.addLayer({
-    'id': 'floating-buildings',
-    'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
-    // 【フィルター】実際の高さが 4.7m を超える建物のみを表示
-    // これにより、30.3m〜35.0m の範囲に収まる地下街入口や低い構造物が消えます
-    'filter': ['>', ['number', ['get', 'height'], 0], 4.7], 
-    'paint': {
-        // 色は純白
-        'fill-extrusion-color': '#ffffff',
-        'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, // 30.3m
-        
-        // 【高さ】データがない場合は一律 15m (30.3 + 15 = 45.3m) として描画
-        'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 15], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
-        
-        // 【不透明度】透けない設定（1.0）に戻す
-        'fill-extrusion-opacity': 1.0 
-    }
-});
+    // 4. 建物レイヤー
+    map.addLayer({
+        'id': 'floating-buildings',
+        'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
+        'filter': ['>', ['number', ['get', 'height'], 0], 4.7], 
+        'paint': {
+            'fill-extrusion-color': '#ffffff',
+            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3,
+            'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 15], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
+            'fill-extrusion-opacity': 1.0 
+        }
+    });
     
     await initSubway();
 });
@@ -102,6 +87,10 @@ async function initSubway() {
     const dateEl = document.getElementById('date'); 
     const clockEl = document.getElementById('clock');
     const trainCountEl = document.getElementById('train-count');
+
+    // ★ ポップアップと選択IDを管理する変数
+    let selectedTid = null;
+    let activePopup = null;
 
     try {
         const [stopsT, stT, routesT, tripsT, subGeo] = await Promise.all([
@@ -127,7 +116,9 @@ async function initSubway() {
         routesT.split('\n').forEach(line => {
             const c = line.replace(/"/g, "").split(',');
             if (c.length < 7) return;
-            routeData.set(c[0].trim(), { color: "#" + c[6].trim().toLowerCase(), name: c[2].trim() });
+            // ★ routes.txt の 4列目(index 3) から路線名を取得
+            const rName = c[3].split('（')[0].trim();
+            routeData.set(c[0].trim(), { color: "#" + c[6].trim().toLowerCase(), name: rName });
         });
 
         const tripToRoute = new Map();
@@ -198,64 +189,72 @@ async function initSubway() {
 
             const t = c[1].split(':'), sec = (parseInt(t[0])||0)*3600 + (parseInt(t[1])||0)*60 + (parseInt(t[2])||0);
             if (!activeTrips.has(tid)) activeTrips.set(tid, []);
-            activeTrips.get(tid).push({ sec, sid });
+            // ★ activeTrips に時刻情報(time)も保存するように拡張
+            activeTrips.get(tid).push({ sec, sid, time: arrivalTime });
 
             if (!allStopTimes.has(tid)) allStopTimes.set(tid, []);
             allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
         });
 
-map.on('click', 'tr-layer', (e) => {
-    const f = e.features[0];
-    const tid = f.properties.tid;
-    const rid = tripToRoute.get(tid);
-    
-    // 路線情報の取得（取得できない場合のフォールバック付き）
-    const info = routeData.get(rid) || { 
-        name: tid.includes("N") ? "南北線" : (tid.includes("T") ? "東西線" : "東豊線"), 
-        color: f.properties.color || "#666" 
-    };
+        // --- 2. クリックイベント ---
+        map.on('click', 'tr-layer', (e) => {
+            const f = e.features[0];
+            selectedTid = f.properties.tid;
+            const rid = tripToRoute.get(selectedTid);
+            
+            const info = routeData.get(rid) || { 
+                name: selectedTid.includes("N") ? "南北線" : (selectedTid.includes("T") ? "東西線" : "東豊線"), 
+                color: f.properties.color || "#666" 
+            };
 
-    const panel = document.getElementById('panel');
-    const titleEl = document.getElementById('panel-title');
-    const timetableEl = document.getElementById('timetable');
+            const panel = document.getElementById('panel');
+            const titleEl = document.getElementById('panel-title');
+            const timetableEl = document.getElementById('timetable');
 
-    // パネルタイトルの構築
-    titleEl.innerHTML = `
-        <div class="line-strip" style="background-color: ${info.color};"></div>
-        <span>${info.name}</span>
-    `;
+            // パネルタイトルの構築
+            titleEl.innerHTML = `
+                <div class="line-strip" style="background-color: ${info.color};"></div>
+                <span>${info.name}</span>
+            `;
 
-    timetableEl.innerHTML = '';
-    const stops = allStopTimes.get(tid) || [];
-    if (stops.length === 0) {
-        timetableEl.innerHTML = '<div style="padding:20px; color:#666;">時刻表データが見つかりません</div>';
-    } else {
-        stops.forEach(s => {
-            const item = document.createElement('div');
-            item.className = 'station-item';
-            item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
-            timetableEl.appendChild(item);
+            timetableEl.innerHTML = '';
+            const stops = allStopTimes.get(selectedTid) || [];
+            if (stops.length === 0) {
+                timetableEl.innerHTML = '<div style="padding:20px; color:#666;">時刻表データが見つかりません</div>';
+            } else {
+                stops.forEach(s => {
+                    const item = document.createElement('div');
+                    item.className = 'station-item';
+                    item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
+                    timetableEl.appendChild(item);
+                });
+            }
+
+            panel.classList.add('active');
+
+            // ★ 新規ポップアップ作成（追尾用）
+            if (activePopup) activePopup.remove();
+            activePopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 20 })
+                .setLngLat(e.lngLat)
+                .setHTML('<div id="popup-dynamic-content">読み込み中...</div>')
+                .addTo(map);
         });
-    }
 
-    // パネルを表示
-    panel.classList.add('active');
-
-    // 吹き出し（ポップアップ）の内容を修正
-    new mapboxgl.Popup({ closeButton: false }) // Mini Tokyo風に×ボタンなし
-        .setLngLat(e.lngLat)
-        .setHTML(`
-            <div style="display:flex; align-items:center; padding: 4px 8px; font-weight: bold; color: #333;">
-                <div style="width:4px; height:16px; background:${info.color}; margin-right:10px; border-radius:2px;"></div>
-                ${info.name}
-            </div>`)
-        .addTo(map);
-});
+        // ★ 地図の何もないところをクリックした時に解除
+        map.on('click', (e) => {
+            const features = map.queryRenderedFeatures(e.point, { layers: ['tr-layer'] });
+            if (!features.length) {
+                selectedTid = null;
+                if (activePopup) { activePopup.remove(); activePopup = null; }
+                const panel = document.getElementById('panel');
+                if (panel) panel.classList.remove('active');
+            }
+        });
 
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        // --- 3. 補助関数（ここにないと ReferenceError になります） ---
+        // --- 3. 補助関数 ---
         function isCriticalSection(n1, n2) {
             const pairs = [["さっぽろ", "大通"], ["大通", "すすきの"], ["大通", "豊水すすきの"], ["大通", "西１１丁目"], ["大通", "西11丁目"], ["大通", "バスセンター前"]];
             return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
@@ -326,11 +325,32 @@ map.on('click', 'tr-layer', (e) => {
                         const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
                         if (!p1 || !p2) continue;
                         
-                        // ReferenceError の原因だった getHybridPos を呼び出す場所
                         const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
                         const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
                         const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
                         
+                        // ★ 選択された電車を動的に追尾
+                        if (tid === selectedTid && activePopup) {
+                            activePopup.setLngLat([pos.lng, pos.lat]);
+                            const isStopped = (s - c.sec) < CONFIG.TRAIN.STOP_DURATION;
+                            
+                            const statusHtml = isStopped 
+                                ? `停車：<b>${p1.name}</b> ${c.time}<br>次駅：${p2.name} ${n.time}`
+                                : `前駅：${p1.name} ${c.time}<br>次駅：<b>${p2.name}</b> ${n.time}`;
+                            
+                            const content = `
+                                <div id="popup-dynamic-content" style="display:flex; align-items:center; min-width:140px; font-family:sans-serif;">
+                                    <div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div>
+                                    <div>
+                                        <div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div>
+                                        <div style="font-size:11px; margin-top:3px; color:#666; line-height:1.4;">${statusHtml}</div>
+                                    </div>
+                                </div>`;
+                            
+                            const popupDiv = document.getElementById('popup-dynamic-content');
+                            if (popupDiv) popupDiv.parentElement.innerHTML = content;
+                        }
+
                         trainFeats.push({ 
                             type: 'Feature', 
                             properties: { tid: tid, color: info.color, h_base: hBase, h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) }, 
@@ -351,4 +371,3 @@ map.on('click', 'tr-layer', (e) => {
         console.error(e); 
     }
 }
-
