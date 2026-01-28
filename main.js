@@ -10,13 +10,12 @@ const map = new mapboxgl.Map({
     antialias: true
 });
 
-// ★南北線の高度設定：南平岸(N13)〜真駒内(N16)を25mに設定
+// ★判定を「駅名」に変更。stops.txtにある駅名と一致させてください
 const STATION_ALTITUDE = {
-    "N13": 25, "N14": 25, "N15": 25, "N16": 25
+    "南平岸": 25, "澄川": 25, "自衛隊前": 25, "真駒内": 25
 };
 
 map.on('load', async () => {
-    // ベースマップの透明化処理
     const layers = map.getStyle().layers;
     layers.forEach(layer => {
         if (layer.id !== 'background') {
@@ -29,7 +28,6 @@ map.on('load', async () => {
         }
     });
 
-    // 1. 公園レイヤー
     map.addLayer({
         'id': 'floating-parks',
         'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
@@ -37,14 +35,12 @@ map.on('load', async () => {
         'paint': { 'fill-extrusion-color': '#ffffff', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 'fill-extrusion-opacity': 0.4 }
     });
 
-    // 2. 川・水面レイヤー
     map.addLayer({
         'id': 'floating-water',
         'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
         'paint': { 'fill-extrusion-color': '#b0c4de', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2, 'fill-extrusion-opacity': 0.3 }
     });
 
-    // 3. 道路レイヤー
     map.addLayer({
         'id': 'floating-roads',
         'source': 'composite', 'source-layer': 'road', 'type': 'line',
@@ -52,7 +48,6 @@ map.on('load', async () => {
         'paint': { 'line-color': '#ffffff', 'line-width': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 8, ['secondary', 'tertiary'], 4, 2], 'line-opacity': 0.6 }
     });
 
-    // 4. 建物レイヤー
     map.addLayer({
         'id': 'floating-buildings',
         'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
@@ -206,7 +201,8 @@ async function initSubway() {
             const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
             const stopFeats = [];
             stopMap.forEach((val) => {
-                const alt = STATION_ALTITUDE[val.sid] || 0;
+                // ★IDではなく「駅名」で高度を判定
+                const alt = STATION_ALTITUDE[val.name] || 0;
                 const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, { units: 'meters', steps: 32, properties: { name: val.name, h_base: alt, h_top: alt + 0.1 } });
                 stopFeats.push(circle);
             });
@@ -218,8 +214,6 @@ async function initSubway() {
             activeTrips.forEach((stops, tid) => {
                 const rid = tripToRoute.get(tid), info = routeData.get(rid);
                 if (!info) return;
-
-                // ★ベース高度の調整：地下区間での浮きを解消するため最小限に設定
                 let hBaseLayer = info.name.includes("南北線") ? 0.3 : (info.name.includes("東西線") ? 0.2 : 0.1);
 
                 for (let i = 0; i < stops.length - 1; i++) {
@@ -232,8 +226,9 @@ async function initSubway() {
                         const elapsed = s - (c.sec + CONFIG.TRAIN.STOP_DURATION);
                         const pct = Math.max(0, Math.min(1.0, elapsed / Math.max(1, travelTime)));
                         
-                        const alt1 = STATION_ALTITUDE[p1.sid] || 0;
-                        const alt2 = STATION_ALTITUDE[p2.sid] || 0;
+                        // ★「駅名」による高度補完計算
+                        const alt1 = STATION_ALTITUDE[p1.name] || 0;
+                        const alt2 = STATION_ALTITUDE[p2.name] || 0;
                         const currentAlt = alt1 + (alt2 - alt1) * pct;
 
                         const pos = getHybridPos(p1, p2, pct);
@@ -255,7 +250,7 @@ async function initSubway() {
                             type: 'Feature', 
                             properties: { 
                                 tid: tid, color: info.color, 
-                                h_base: hBaseLayer + currentAlt, // ★微浮き + 坂道高度
+                                h_base: hBaseLayer + currentAlt, 
                                 h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * hScale) 
                             }, 
                             geometry: { type: 'Polygon', coordinates: [corners] } 
