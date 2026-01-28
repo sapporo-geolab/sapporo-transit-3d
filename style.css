@@ -1,75 +1,77 @@
-/* style.css の #panel 部分を書き換え */
+/* 下部詳細パネル（カード型・中央配置） */
 #panel {
     position: absolute;
-    bottom: -300px;
-    left: 50%; /* 中央寄せの開始点 */
-    transform: translateX(-50%); /* 自身の幅の半分だけ左に戻して完全中央へ */
-    width: 90%; /* モバイル向け基本幅 */
-    max-width: 450px; /* PCで見ても広がりすぎない最大幅 */
-    height: 250px;
+    bottom: -320px; /* 最初は隠す */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 400px; /* Mini Tokyo風に幅を制限 */
+    height: 280px;
     background: rgba(30, 30, 30, 0.95);
     color: white;
     z-index: 20;
-    transition: bottom 0.3s ease-out;
-    font-family: sans-serif;
-    box-shadow: 0 -5px 25px rgba(0,0,0,0.5); /* 影を少し強調 */
-    overflow-y: auto;
-    border-radius: 12px 12px 0 0; /* 角を丸めてカード風に */
+    transition: bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.6);
+    overflow: hidden; /* スクロールはリスト内のみ */
+    border-radius: 16px 16px 0 0; /* 角の丸み */
 }
 
-/* タイトル部分のレイアウト調整 */
+#panel.active { bottom: 0; }
+
+.panel-header {
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
 .panel-title { 
     display: flex;
     align-items: center;
-    font-weight: bold; 
-    font-size: 18px; 
+    font-weight: bold;
+    font-size: 17px;
 }
 
-/* 路線カラーの縦棒 */
+/* 路線カラーの棒 */
 .line-strip {
-    width: 6px;
-    height: 24px;
+    width: 5px;
+    height: 22px;
     margin-right: 12px;
     border-radius: 2px;
 }
 
-/* 駅リスト（タイムテーブル） */
-.station-list {
+.close-btn { cursor: pointer; font-size: 22px; opacity: 0.7; }
+.close-btn:hover { opacity: 1; }
+
+#timetable {
+    height: 200px;
+    overflow-y: auto;
     padding: 10px 20px;
-    list-style: none;
-    margin: 0;
 }
 
+/* 駅リストのスタイル */
 .station-item {
     display: flex;
     align-items: center;
-    padding: 8px 0;
-    border-left: 3px solid #666;
-    margin-left: 10px;
-    padding-left: 20px;
+    padding: 10px 0;
     position: relative;
+    border-left: 2px solid rgba(255,255,255,0.2);
+    margin-left: 6px;
+    padding-left: 20px;
 }
 
 .station-item::before {
     content: '';
     position: absolute;
-    left: -7px;
-    width: 11px;
-    height: 11px;
+    left: -6px;
+    width: 10px;
+    height: 10px;
     background: #fff;
     border-radius: 50%;
-    border: 2px solid #333;
 }
 
-.station-time { width: 80px; color: #aaa; font-family: monospace; }
-.station-name { font-size: 16px; }
-
-/* ポップアップのカスタマイズ */
-.mapboxgl-popup-content {
-    background: #fff;
-    color: #333;
-    border-radius: 8px;
-    padding: 10px;
-    font-weight: bold;
-
-}
+.station-time { width: 70px; color: #888; font-size: 13px; font-family: monospace; }
+.station-name { font-size: 15px; }
