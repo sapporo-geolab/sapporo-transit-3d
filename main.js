@@ -100,18 +100,18 @@ async function initSubway() {
         // ★駅サークル（3D）
         map.addLayer({ 'id': 'stop-circles-3d', 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#cccccc', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.5 } });
         
-        // ★駅サークルの枠線（高架対応のため Line から Fill-Extrusion に変更）
-        map.addLayer({ 
-            'id': 'stop-circles-outline', 
-            'type': 'fill-extrusion', 
-            'source': 'stops-source', 
-            'paint': { 
-                'fill-extrusion-color': '#000000', 
-                'fill-extrusion-base': ['get', 'h_base'], 
-                'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05],
-                'fill-extrusion-opacity': 0.8
-            } 
-        });
+   // 駅サークルの枠線を黒くし、高度に対応させる
+map.addLayer({ 
+    'id': 'stop-circles-outline', 
+    'type': 'fill-extrusion', 
+    'source': 'stops-source', 
+    'paint': { 
+        'fill-extrusion-color': '#000000', // ここで黒色を指定
+        'fill-extrusion-base': ['get', 'h_base'], // 駅の高度に合わせる
+        'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05], // 5cmだけ厚みを出して重なりを防ぐ
+        'fill-extrusion-opacity': 0.9
+    } 
+});
 
         // ★駅名ラベル（高架駅の場合、空中にあるように見えるようオフセット調整）
         map.addLayer({ 
@@ -301,3 +301,4 @@ async function initSubway() {
         animate();
     } catch (e) { console.error(e); }
 }
+
