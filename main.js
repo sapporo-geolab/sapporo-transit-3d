@@ -68,17 +68,27 @@ async function initSubway() {
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-        // --- 全路線の3D線路（統合リボン）生成ロジック ---
+        // --- 1本に統合された3D線路リボン ---
         const shelterFeatures = [];
+        // 同一経路の重複描画を防ぐため軌跡を記録
+        const drawnLines = new Set();
+
         subGeo.features.forEach(feature => {
             if (feature.geometry.type !== "LineString") return;
             const props = feature.properties;
-            let sColor = "#666666"; // デフォルト
+            
+            // 識別用のユニークキー（色と始点・終点）
+            const coords = feature.geometry.coordinates;
+            const lineKey = `${props.colour}-${coords[0][0]}-${coords[coords.length-1][0]}`;
+            if (drawnLines.has(lineKey)) return;
+            drawnLines.add(lineKey);
+
+            let sColor = "#666666";
             if (props.name?.includes("東西線") || props.colour?.toLowerCase() === "#ff8c00") sColor = "#FF8C00";
             if (props.name?.includes("南北線") || props.colour?.toLowerCase() === "#008800") sColor = "#008800";
             if (props.name?.includes("東豊線") || props.colour?.toLowerCase() === "blue") sColor = "#0070C0";
 
-            const turfLine = turf.lineString(feature.geometry.coordinates);
+            const turfLine = turf.lineString(coords);
             const totalDist = turf.length(turfLine);
             const segmentLength = 0.03;
 
@@ -90,10 +100,11 @@ async function initSubway() {
                     return 0;
                 };
                 const midAlt = (getAlt(start) + getAlt(end)) / 2;
-                const offsetL = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.0015, {units: 'kilometers'});
-                const offsetR = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.0015, {units: 'kilometers'});
-                const coords = [offsetL.geometry.coordinates[0], offsetL.geometry.coordinates[1], offsetR.geometry.coordinates[1], offsetR.geometry.coordinates[0], offsetL.geometry.coordinates[0]];
-                shelterFeatures.push({ type: 'Feature', properties: { h_base: midAlt + 0.05, h_top: midAlt + 0.2, color: sColor }, geometry: { type: 'Polygon', coordinates: [coords] } });
+                // 車幅(CONFIG.TRAIN.WIDTH)より少し狭い幅(約3.5m)に設定
+                const offsetL = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.0012, {units: 'kilometers'});
+                const offsetR = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.0012, {units: 'kilometers'});
+                const polygonCoords = [offsetL.geometry.coordinates[0], offsetL.geometry.coordinates[1], offsetR.geometry.coordinates[1], offsetR.geometry.coordinates[0], offsetL.geometry.coordinates[0]];
+                shelterFeatures.push({ type: 'Feature', properties: { h_base: midAlt + 0.05, h_top: midAlt + 0.2, color: sColor }, geometry: { type: 'Polygon', coordinates: [polygonCoords] } });
             }
         });
         map.addSource('shelter-source', { type: 'geojson', data: { type: 'FeatureCollection', features: shelterFeatures } });
@@ -104,8 +115,10 @@ async function initSubway() {
             map.addLayer({ 'id': `stop-circles-outline-${i}`, 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#000000', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05], 'fill-extrusion-opacity': 0.9, 'fill-extrusion-translate': [off, off], 'fill-extrusion-translate-anchor': 'viewport' } });
         }
         map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-anchor': 'top', 'text-offset': ['case', ['==', ['get', 'h_base'], 25], ['literal', [0, -4.5]], ['literal', [0, 1.5]]] }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
-        map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', color], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
-        map.addLayer({ 'id': 'shelter-layer', 'type': 'fill-extrusion', 'source': 'shelter-source', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.8 } }, 'tr-layer');
+        
+        // ★修正箇所：ReferenceErrorの原因を解決
+        map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
+        map.addLayer({ 'id': 'shelter-layer', 'type': 'fill-extrusion', 'source': 'shelter-source', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 1.0 } }, 'tr-layer');
 
         const activeTrips = new Map(), allStopTimes = new Map();
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
@@ -113,12 +126,12 @@ async function initSubway() {
             if (!line.includes(targetDay)) return;
             const c = line.replace(/"/g, "").split(',');
             if (c.length < 5 || line.startsWith('trip_id')) return;
-            const tid = c[0].trim(), arrivalTime = c[1].trim().substring(0, 5), sid = c[3].trim(), sname = stopMap.get(sid)?.name || "不明な駅";
+            const tid = c[0].trim(), arrivalTime = c[1].trim().substring(0, 5), sid = c[3].trim();
             const t = c[1].split(':'), sec = (parseInt(t[0])||0)*3600 + (parseInt(t[1])||0)*60 + (parseInt(t[2])||0);
             if (!activeTrips.has(tid)) activeTrips.set(tid, []);
             activeTrips.get(tid).push({ sec, sid, time: arrivalTime });
             if (!allStopTimes.has(tid)) allStopTimes.set(tid, []);
-            allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
+            allStopTimes.get(tid).push({ time: arrivalTime, name: stopMap.get(sid)?.name || "" });
         });
 
         map.on('click', 'tr-layer', (e) => {
@@ -133,35 +146,33 @@ async function initSubway() {
                 item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
                 timetableEl.appendChild(item);
             });
-            const dot = document.getElementById('pulsating-dot'), line = document.getElementById('progress-line');
-            if(dot) dot.style.display = 'block';
-            if(line) { line.style.backgroundColor = info.color; line.style.height = '0px'; }
-            panel.classList.add('active');
+            document.getElementById('panel').classList.add('active');
             if (activePopup) activePopup.remove();
-            activePopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 20 }).setLngLat(e.lngLat).setHTML('<div id="popup-dynamic-content"></div>').addTo(map);
+            activePopup = new mapboxgl.Popup({ closeButton: false, offset: 20 }).setLngLat(e.lngLat).setHTML('<div id="popup-dynamic-content"></div>').addTo(map);
         });
 
         map.on('click', (e) => { if (!map.queryRenderedFeatures(e.point, { layers: ['tr-layer'] }).length) { selectedTid = null; if (activePopup) activePopup.remove(); document.getElementById('panel').classList.remove('active'); } });
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        // ★吸着復活：GeoJSONのカーブに沿って走るロジック
+        // 吸着とセンター走行の両立
         function getHybridPos(p1, p2, pct) {
             const lerpLng = p1.lon + (p2.lon - p1.lon) * pct, lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
             const pt = turf.point([lerpLng, lerpLat]);
-            let closestPt = pt, min_dist = Infinity;
+            let closestPt = pt;
+            let min_dist = Infinity;
             subGeo.features.forEach(f => {
                 try {
                     const snapped = turf.nearestPointOnLine(f, pt);
                     if (snapped.properties.dist < min_dist) { min_dist = snapped.properties.dist; closestPt = snapped; }
                 } catch(e) {}
             });
-            const angle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
-            return { lng: closestPt.geometry.coordinates[0], lat: closestPt.geometry.coordinates[1], angle: angle };
+            return { lng: closestPt.geometry.coordinates[0], lat: closestPt.geometry.coordinates[1], angle: Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon) };
         }
 
         function animate() {
             const now = new Date();
+            clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
             const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
             const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - map.getZoom())));
             const latCorrection = 1 / Math.cos(map.getCenter().lat * Math.PI / 180);
@@ -192,11 +203,11 @@ async function initSubway() {
                             activePopup.setLngLat([pos.lng, pos.lat]);
                             const isSt = (s - c.sec) < CONFIG.TRAIN.STOP_DURATION;
                             const popupDiv = document.getElementById('popup-dynamic-content');
-                            if (popupDiv) popupDiv.parentElement.innerHTML = `<div id="popup-dynamic-content" style="display:flex; align-items:center; min-width:140px; font-family:sans-serif;"><div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div><div><div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div><div style="font-size:11px; margin-top:3px; color:#666;">${isSt ? `停車：<b>${p1.name}</b>` : `前駅：${p1.name}`}<br>次駅：<b>${p2.name}</b> ${n.time}</div></div></div>`;
+                            if (popupDiv) popupDiv.innerHTML = `<div style="display:flex; align-items:center; min-width:140px; font-family:sans-serif;"><div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div><div><div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div><div style="font-size:11px; margin-top:3px; color:#666;">${isSt ? `停車：<b>${p1.name}</b>` : `前駅：${p1.name}`}<br>次駅：<b>${p2.name}</b> ${n.time}</div></div></div>`;
                             const dot = document.getElementById('pulsating-dot'), line = document.getElementById('progress-line');
                             if (dot && line) { const top = (i * 45) + (pct * 45) + 32; dot.style.top = `${top-6}px`; line.style.height = `${top-32}px`; dot.style.display = 'block'; }
                         }
-                        trainFeats.push({ type: 'Feature', properties: { tid, color: info.color, h_base: hBaseLayer + curAlt, h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * scale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
+                        trainFeats.push({ type: 'Feature', properties: { tid, color: info.color, h_base: hBaseLayer + curAlt, h_top: hBaseLayer + curAlt + (CONFIG.TRAIN.HEIGHT * scale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
                         break;
                     }
                 }
