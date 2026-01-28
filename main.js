@@ -10,8 +10,12 @@ const map = new mapboxgl.Map({
     antialias: true
 });
 
+// ★南北線の駅別高度設定（他路線はデフォルト0m）
+const STATION_ALTITUDE = {
+    "N13": 25, "N14": 25, "N15": 25, "N16": 25 // 南平岸〜真駒内
+};
+
 map.on('load', async () => {
-    // ベースマップの透明化処理
     const layers = map.getStyle().layers;
     layers.forEach(layer => {
         if (layer.id !== 'background') {
@@ -24,80 +28,43 @@ map.on('load', async () => {
         }
     });
 
-    // 1. 公園レイヤー
     map.addLayer({
         'id': 'floating-parks',
         'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
         'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
-        'paint': {
-            'fill-extrusion-color': '#ffffff', 
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 
-            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 
-            'fill-extrusion-opacity': 0.4 
-        }
+        'paint': { 'fill-extrusion-color': '#ffffff', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 'fill-extrusion-opacity': 0.4 }
     });
 
-    // 2. 川・水面レイヤー
     map.addLayer({
         'id': 'floating-water',
         'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
-        'paint': {
-            'fill-extrusion-color': '#b0c4de', 
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1,
-            'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2,
-            'fill-extrusion-opacity': 0.3 
-        }
+        'paint': { 'fill-extrusion-color': '#b0c4de', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2, 'fill-extrusion-opacity': 0.3 }
     });
 
-    // 3. 道路レイヤー
     map.addLayer({
         'id': 'floating-roads',
         'source': 'composite', 'source-layer': 'road', 'type': 'line',
         'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'street'], true, false],
-        'paint': {
-            'line-color': '#ffffff',
-            'line-width': [
-                'match',
-                ['get', 'class'],
-                ['motorway', 'trunk', 'primary'], 8,
-                ['secondary', 'tertiary'], 4,
-                2
-            ],
-            'line-opacity': 0.6
-        }
+        'paint': { 'line-color': '#ffffff', 'line-width': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 8, ['secondary', 'tertiary'], 4, 2], 'line-opacity': 0.6 }
     });
 
-    // 4. 建物レイヤー
     map.addLayer({
         'id': 'floating-buildings',
         'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
         'filter': ['>', ['number', ['get', 'height'], 0], 4.7], 
-        'paint': {
-            'fill-extrusion-color': '#ffffff',
-            'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3,
-            'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 15], CONFIG.CITY.FLOAT_HEIGHT + 0.3],
-            'fill-extrusion-opacity': 1.0 
-        }
+        'paint': { 'fill-extrusion-color': '#ffffff', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 15], CONFIG.CITY.FLOAT_HEIGHT + 0.3], 'fill-extrusion-opacity': 1.0 }
     });
     
     await initSubway();
 });
 
 async function initSubway() {
-    const dateEl = document.getElementById('date'); 
-    const clockEl = document.getElementById('clock');
-    const trainCountEl = document.getElementById('train-count');
-
-    let selectedTid = null;
-    let activePopup = null;
+    const dateEl = document.getElementById('date'), clockEl = document.getElementById('clock'), trainCountEl = document.getElementById('train-count');
+    let selectedTid = null, activePopup = null;
 
     try {
         const [stopsT, stT, routesT, tripsT, subGeo] = await Promise.all([
-            fetch('./stops.txt').then(r => r.text()),
-            fetch('./stop_times.txt').then(r => r.text()),
-            fetch('./routes.txt').then(r => r.text()),
-            fetch('./trips.txt').then(r => r.text()),
-            fetch('./sapporo_subway.geojson').then(r => r.json())
+            fetch('./stops.txt').then(r => r.text()), fetch('./stop_times.txt').then(r => r.text()), fetch('./routes.txt').then(r => r.text()), fetch('./trips.txt').then(r => r.text()), fetch('./sapporo_subway.geojson').then(r => r.json())
         ]);
 
         const stopMap = new Map();
@@ -105,9 +72,8 @@ async function initSubway() {
         stopsT.split('\n').forEach(line => {
             const c = line.replace(/"/g, "").split(',');
             if (c.length < 4 || line.startsWith('stop_id')) return;
-            const sid = c[0].trim(), sname = c[1].trim();
-            const lon = parseFloat(c[3]), lat = parseFloat(c[2]);
-            stopMap.set(sid, { lon, lat, name: sname });
+            const sid = c[0].trim(), sname = c[1].trim(), lon = parseFloat(c[3]), lat = parseFloat(c[2]);
+            stopMap.set(sid, { sid, lon, lat, name: sname });
             stopFeatures.push({ type: 'Feature', properties: { name: sname }, geometry: { type: 'Point', coordinates: [lon, lat] } });
         });
 
@@ -126,66 +92,25 @@ async function initSubway() {
         });
 
         map.addSource('rail', { type: 'geojson', data: subGeo });
-        map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: stopFeatures } });
+        map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
-        
-        map.addLayer({
-            'id': 'stop-circles-3d',
-            'type': 'fill-extrusion',
-            'source': 'stops-source',
-            'paint': {
-                'fill-extrusion-color': '#cccccc',
-                'fill-extrusion-base': 0,
-                'fill-extrusion-height': 0.1,
-                'fill-extrusion-opacity': 0.5
-            }
-        });
-
-        map.addLayer({
-            'id': 'stop-circles-outline',
-            'type': 'line',
-            'source': 'stops-source',
-            'paint': {
-                'line-color': '#000000',
-                'line-width': 2
-            }
-        });
-
-        map.addLayer({ 
-            'id': 'stop-labels', 
-            'type': 'symbol', 
-            'source': 'stops-source', 
-            'layout': { 
-                'text-field': ['get', 'name'], 
-                'text-size': 11, 
-                'text-offset': [0, 1.5], 
-                'text-anchor': 'top' 
-            }, 
-            'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } 
-        });
-
+        map.addLayer({ 'id': 'stop-circles-3d', 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#cccccc', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.5 } });
+        map.addLayer({ 'id': 'stop-circles-outline', 'type': 'line', 'source': 'stops-source', 'paint': { 'line-color': '#000000', 'line-width': 2 } });
+        map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-offset': [0, 1.5], 'text-anchor': 'top' }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
 
-        const activeTrips = new Map();
-        const allStopTimes = new Map(); 
+        const activeTrips = new Map(), allStopTimes = new Map();
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
-
         stT.split('\n').forEach(line => {
             if (!line.includes(targetDay)) return;
             const c = line.replace(/"/g, "").split(',');
             if (c.length < 5 || line.startsWith('trip_id')) return;
-            
-            const tid = c[0].trim();
-            const arrivalTime = c[1].trim().substring(0, 5);
-            const sid = c[3].trim();
-            const sname = stopMap.get(sid)?.name || "不明な駅";
-
+            const tid = c[0].trim(), arrivalTime = c[1].trim().substring(0, 5), sid = c[3].trim(), sname = stopMap.get(sid)?.name || "不明な駅";
             const t = c[1].split(':'), sec = (parseInt(t[0])||0)*3600 + (parseInt(t[1])||0)*60 + (parseInt(t[2])||0);
             if (!activeTrips.has(tid)) activeTrips.set(tid, []);
             activeTrips.get(tid).push({ sec, sid, time: arrivalTime });
-
             if (!allStopTimes.has(tid)) allStopTimes.set(tid, []);
             allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
         });
@@ -194,53 +119,23 @@ async function initSubway() {
             const f = e.features[0];
             selectedTid = f.properties.tid;
             const rid = tripToRoute.get(selectedTid);
-            const info = routeData.get(rid) || { 
-                name: selectedTid.includes("N") ? "南北線" : (selectedTid.includes("T") ? "東西線" : "東豊線"), 
-                color: f.properties.color || "#666" 
-            };
-
-            const panel = document.getElementById('panel');
-            const titleEl = document.getElementById('panel-title');
-            const timetableEl = document.getElementById('timetable');
-
-            titleEl.innerHTML = `
-                <div class="line-strip" style="background-color: ${info.color};"></div>
-                <span>${info.name}</span>
-            `;
-
-            // インジケーター（進行線と点）を初期化
-            timetableEl.innerHTML = `
-                <div id="progress-line"></div>
-                <div id="pulsating-dot"></div>
-            `;
-            
+            const info = routeData.get(rid) || { name: selectedTid.includes("N") ? "南北線" : (selectedTid.includes("T") ? "東西線" : "東豊線"), color: f.properties.color || "#666" };
+            const panel = document.getElementById('panel'), titleEl = document.getElementById('panel-title'), timetableEl = document.getElementById('timetable');
+            titleEl.innerHTML = `<div class="line-strip" style="background-color: ${info.color};"></div><span>${info.name}</span>`;
+            timetableEl.innerHTML = `<div id="progress-line"></div><div id="pulsating-dot"></div>`;
             const stops = allStopTimes.get(selectedTid) || [];
-            if (stops.length === 0) {
-                timetableEl.innerHTML += '<div style="padding:20px; color:#666;">時刻表データが見つかりません</div>';
-            } else {
-                stops.forEach(s => {
-                    const item = document.createElement('div');
-                    item.className = 'station-item';
-                    item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
-                    timetableEl.appendChild(item);
-                });
-            }
-
-            const dot = document.getElementById('pulsating-dot');
-            const line = document.getElementById('progress-line');
+            stops.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'station-item';
+                item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
+                timetableEl.appendChild(item);
+            });
+            const dot = document.getElementById('pulsating-dot'), line = document.getElementById('progress-line');
             if(dot) dot.style.display = 'block';
-            if(line) {
-                line.style.backgroundColor = info.color;
-                line.style.height = '0px';
-            }
-
+            if(line) { line.style.backgroundColor = info.color; line.style.height = '0px'; }
             panel.classList.add('active');
-
             if (activePopup) activePopup.remove();
-            activePopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 20 })
-                .setLngLat(e.lngLat)
-                .setHTML('<div id="popup-dynamic-content">読み込み中...</div>')
-                .addTo(map);
+            activePopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 20 }).setLngLat(e.lngLat).setHTML('<div id="popup-dynamic-content">読み込み中...</div>').addTo(map);
         });
 
         map.on('click', (e) => {
@@ -306,84 +201,5 @@ async function initSubway() {
             const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
             const stopFeats = [];
             stopMap.forEach((val) => {
-                const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, { units: 'meters', steps: 32, properties: { name: val.name } });
-                stopFeats.push(circle);
-            });
-            if (map.getSource('stops-source')) map.getSource('stops-source').setData({ type: 'FeatureCollection', features: stopFeats });
-
-            const hScale = scale, L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
-            const trainFeats = [];
-
-            activeTrips.forEach((stops, tid) => {
-                const rid = tripToRoute.get(tid), info = routeData.get(rid);
-                if (!info) return;
-                let hBase = info.name.includes("南北線") ? 7 : (info.name.includes("東西線") ? 4 : 1);
-
-                for (let i = 0; i < stops.length - 1; i++) {
-                    const c = stops[i], n = stops[i+1];
-                    if (s >= c.sec && s < n.sec) {
-                        const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
-                        if (!p1 || !p2) continue;
-                        
-                        // ★修正：データ上の時刻を到着時間とし、そこから停車時間を考慮した進捗率(pct)を計算
-                        const travelTime = (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION;
-                        const elapsed = s - (c.sec + CONFIG.TRAIN.STOP_DURATION);
-                        const pct = Math.max(0, Math.min(1.0, elapsed / Math.max(1, travelTime)));
-                        
-                        const pos = getHybridPos(p1, p2, pct);
-                        const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
-                        const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
-                        
-                        if (tid === selectedTid && activePopup) {
-                            activePopup.setLngLat([pos.lng, pos.lat]);
-                            const isStopped = (s - c.sec) < CONFIG.TRAIN.STOP_DURATION;
-                            
-                            const statusHtml = isStopped 
-                                ? `停車：<b>${p1.name}</b> ${c.time}<br>次駅：${p2.name} ${n.time}`
-                                : `前駅：${p1.name} ${c.time}<br>次駅：<b>${p2.name}</b> ${n.time}`;
-                            
-                            const content = `
-                                <div id="popup-dynamic-content" style="display:flex; align-items:center; min-width:140px; font-family:sans-serif;">
-                                    <div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div>
-                                    <div>
-                                        <div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div>
-                                        <div style="font-size:11px; margin-top:3px; color:#666; line-height:1.4;">${statusHtml}</div>
-                                    </div>
-                                </div>`;
-                            
-                            const popupDiv = document.getElementById('popup-dynamic-content');
-                            if (popupDiv) popupDiv.parentElement.innerHTML = content;
-
-                            // ★パネル内の現在地インジケーター（点と線）を更新
-                            const dot = document.getElementById('pulsating-dot');
-                            const line = document.getElementById('progress-line');
-                            if (dot && line) {
-                                const itemHeight = 45; // style.cssの固定高さ
-                                const offset = 32;     // 最初の駅の丸の中心
-                                const currentTop = (i * itemHeight) + (pct * itemHeight) + offset;
-                                dot.style.top = `${currentTop - 6}px`;
-                                line.style.height = `${currentTop - offset}px`;
-                                dot.style.display = 'block';
-                            }
-                        }
-
-                        trainFeats.push({ 
-                            type: 'Feature', 
-                            properties: { tid: tid, color: info.color, h_base: hBase, h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) }, 
-                            geometry: { type: 'Polygon', coordinates: [corners] } 
-                        });
-                        break;
-                    }
-                }
-            });
-            if (map.getSource('trains')) map.getSource('trains').setData({ type: 'FeatureCollection', features: trainFeats });
-            trainCountEl.innerText = `${trainFeats.length} trains running`;
-            requestAnimationFrame(animate);
-        }
-
-        animate();
-
-    } catch (e) { 
-        console.error(e); 
-    }
-}
+                const alt = STATION_ALTITUDE[val.sid] || 0;
+                const circle = turf.circle(
