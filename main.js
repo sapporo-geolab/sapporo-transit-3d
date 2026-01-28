@@ -10,9 +10,7 @@ const map = new mapboxgl.Map({
     antialias: true
 });
 
-const STATION_ALTITUDE = {
-    "南平岸": 25, "澄川": 25, "自衛隊前": 25, "真駒内": 25
-};
+const STATION_ALTITUDE = { "南平岸": 25, "澄川": 25, "自衛隊前": 25, "真駒内": 25 };
 
 map.on('load', async () => {
     const layers = map.getStyle().layers;
@@ -27,38 +25,16 @@ map.on('load', async () => {
         }
     });
 
-    map.addLayer({
-        'id': 'floating-parks',
-        'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion',
-        'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false],
-        'paint': { 'fill-extrusion-color': '#ffffff', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 'fill-extrusion-opacity': 0.4 }
-    });
-
-    map.addLayer({
-        'id': 'floating-water',
-        'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion',
-        'paint': { 'fill-extrusion-color': '#b0c4de', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2, 'fill-extrusion-opacity': 0.3 }
-    });
-
-    map.addLayer({
-        'id': 'floating-roads',
-        'source': 'composite', 'source-layer': 'road', 'type': 'line',
-        'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'street'], true, false],
-        'paint': { 'line-color': '#ffffff', 'line-width': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 8, ['secondary', 'tertiary'], 4, 2], 'line-opacity': 0.6 }
-    });
-
-    map.addLayer({
-        'id': 'floating-buildings',
-        'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion',
-        'filter': ['>', ['number', ['get', 'height'], 0], 4.7], 
-        'paint': { 'fill-extrusion-color': '#ffffff', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 15], CONFIG.CITY.FLOAT_HEIGHT + 0.3], 'fill-extrusion-opacity': 1.0 }
-    });
+    map.addLayer({ 'id': 'floating-parks', 'source': 'composite', 'source-layer': 'landuse', 'type': 'fill-extrusion', 'filter': ['match', ['get', 'class'], ['park', 'grass', 'wood', 'scrub'], true, false], 'paint': { 'fill-extrusion-color': '#ffffff', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT, 'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 'fill-extrusion-opacity': 0.4 } });
+    map.addLayer({ 'id': 'floating-water', 'source': 'composite', 'source-layer': 'water', 'type': 'fill-extrusion', 'paint': { 'fill-extrusion-color': '#b0c4de', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.1, 'fill-extrusion-height': CONFIG.CITY.FLOAT_HEIGHT + 0.2, 'fill-extrusion-opacity': 0.3 } });
+    map.addLayer({ 'id': 'floating-roads', 'source': 'composite', 'source-layer': 'road', 'type': 'line', 'filter': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'street'], true, false], 'paint': { 'line-color': '#ffffff', 'line-width': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 8, ['secondary', 'tertiary'], 4, 2], 'line-opacity': 0.6 } });
+    map.addLayer({ 'id': 'floating-buildings', 'source': 'composite', 'source-layer': 'building', 'type': 'fill-extrusion', 'filter': ['>', ['number', ['get', 'height'], 0], 4.7], 'paint': { 'fill-extrusion-color': '#ffffff', 'fill-extrusion-base': CONFIG.CITY.FLOAT_HEIGHT + 0.3, 'fill-extrusion-height': ["+", ["coalesce", ["get", "height"], 15], CONFIG.CITY.FLOAT_HEIGHT + 0.3], 'fill-extrusion-opacity': 1.0 } });
     
     await initSubway();
 });
 
 async function initSubway() {
-    const dateEl = document.getElementById('date'), clockEl = document.getElementById('clock');
+    const clockEl = document.getElementById('clock');
     let selectedTid = null, activePopup = null;
 
     try {
@@ -92,22 +68,19 @@ async function initSubway() {
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-        // --- 全路線の3D線路（リボン）生成ロジック ---
+        // --- 全路線の3D線路（統合リボン）生成ロジック ---
         const shelterFeatures = [];
-        const segmentLength = 0.03; // 少し粗くしてパフォーマンス維持
-
         subGeo.features.forEach(feature => {
             if (feature.geometry.type !== "LineString") return;
             const props = feature.properties;
-            
-            // 色の決定（エラー防止用フォールバック）
-            let sColor = props.colour || "#666666";
-            if (props.name?.includes("東西線")) sColor = "#FF8C00";
-            if (props.name?.includes("南北線") || props.colour?.toLowerCase()==="#008800") sColor = "#008800";
-            if (props.name?.includes("東豊線")) sColor = "#0070C0";
+            let sColor = "#666666"; // デフォルト
+            if (props.name?.includes("東西線") || props.colour?.toLowerCase() === "#ff8c00") sColor = "#FF8C00";
+            if (props.name?.includes("南北線") || props.colour?.toLowerCase() === "#008800") sColor = "#008800";
+            if (props.name?.includes("東豊線") || props.colour?.toLowerCase() === "blue") sColor = "#0070C0";
 
             const turfLine = turf.lineString(feature.geometry.coordinates);
             const totalDist = turf.length(turfLine);
+            const segmentLength = 0.03;
 
             for (let d = 0; d < totalDist; d += segmentLength) {
                 const start = turf.along(turfLine, d), end = turf.along(turfLine, Math.min(d + segmentLength, totalDist));
@@ -117,35 +90,22 @@ async function initSubway() {
                     return 0;
                 };
                 const midAlt = (getAlt(start) + getAlt(end)) / 2;
-                
-                // 車幅（CONFIG.TRAIN.WIDTH）より少し狭い幅（約4m）で板を生成
-                const offsetL = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.002, {units: 'kilometers'});
-                const offsetR = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.002, {units: 'kilometers'});
+                const offsetL = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.0015, {units: 'kilometers'});
+                const offsetR = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.0015, {units: 'kilometers'});
                 const coords = [offsetL.geometry.coordinates[0], offsetL.geometry.coordinates[1], offsetR.geometry.coordinates[1], offsetR.geometry.coordinates[0], offsetL.geometry.coordinates[0]];
-
-                shelterFeatures.push({
-                    type: 'Feature',
-                    properties: { h_base: midAlt + 0.05, h_top: midAlt + 0.2, color: sColor },
-                    geometry: { type: 'Polygon', coordinates: [coords] }
-                });
+                shelterFeatures.push({ type: 'Feature', properties: { h_base: midAlt + 0.05, h_top: midAlt + 0.2, color: sColor }, geometry: { type: 'Polygon', coordinates: [coords] } });
             }
         });
         map.addSource('shelter-source', { type: 'geojson', data: { type: 'FeatureCollection', features: shelterFeatures } });
 
-        // レイヤー追加 (rail-lineは消去しました)
         map.addLayer({ 'id': 'stop-circles-3d', 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#cccccc', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.5 } });
         for (let i = 0; i < 3; i++) {
             const off = (i % 2 === 0 ? 0.8 : -0.8) * Math.ceil(i / 2);
             map.addLayer({ 'id': `stop-circles-outline-${i}`, 'type': 'fill-extrusion', 'source': 'stops-source', 'paint': { 'fill-extrusion-color': '#000000', 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['+', ['get', 'h_base'], 0.05], 'fill-extrusion-opacity': 0.9, 'fill-extrusion-translate': [off, off], 'fill-extrusion-translate-anchor': 'viewport' } });
         }
         map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-anchor': 'top', 'text-offset': ['case', ['==', ['get', 'h_base'], 25], ['literal', [0, -4.5]], ['literal', [0, 1.5]]] }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
-        map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
-        
-        // シェルター（統合線路）を電車の下に配置
-        map.addLayer({
-            'id': 'shelter-layer', 'type': 'fill-extrusion', 'source': 'shelter-source',
-            'paint': { 'fill-extrusion-color': ['coalesce', ['get', 'color'], '#666'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 1.0 }
-        }, 'tr-layer');
+        map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', color], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
+        map.addLayer({ 'id': 'shelter-layer', 'type': 'fill-extrusion', 'source': 'shelter-source', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-opacity': 0.8 } }, 'tr-layer');
 
         const activeTrips = new Map(), allStopTimes = new Map();
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
@@ -182,17 +142,26 @@ async function initSubway() {
         });
 
         map.on('click', (e) => { if (!map.queryRenderedFeatures(e.point, { layers: ['tr-layer'] }).length) { selectedTid = null; if (activePopup) activePopup.remove(); document.getElementById('panel').classList.remove('active'); } });
+        map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        // ★センター走行用：GeoJSONの吸着を行わず、駅間をスムーズに結ぶ
+        // ★吸着復活：GeoJSONのカーブに沿って走るロジック
         function getHybridPos(p1, p2, pct) {
             const lerpLng = p1.lon + (p2.lon - p1.lon) * pct, lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
+            const pt = turf.point([lerpLng, lerpLat]);
+            let closestPt = pt, min_dist = Infinity;
+            subGeo.features.forEach(f => {
+                try {
+                    const snapped = turf.nearestPointOnLine(f, pt);
+                    if (snapped.properties.dist < min_dist) { min_dist = snapped.properties.dist; closestPt = snapped; }
+                } catch(e) {}
+            });
             const angle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
-            return { lng: lerpLng, lat: lerpLat, angle: angle };
+            return { lng: closestPt.geometry.coordinates[0], lat: closestPt.geometry.coordinates[1], angle: angle };
         }
 
         function animate() {
-            const now = new Date(), clockEl = document.getElementById('clock');
-            clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
+            const now = new Date();
             const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
             const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - map.getZoom())));
             const latCorrection = 1 / Math.cos(map.getCenter().lat * Math.PI / 180);
@@ -223,11 +192,11 @@ async function initSubway() {
                             activePopup.setLngLat([pos.lng, pos.lat]);
                             const isSt = (s - c.sec) < CONFIG.TRAIN.STOP_DURATION;
                             const popupDiv = document.getElementById('popup-dynamic-content');
-                            if (popupDiv) popupDiv.parentElement.innerHTML = `<div id="popup-dynamic-content" style="display:flex; align-items:center; min-width:140px;"><div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div><div><div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div><div style="font-size:11px; margin-top:3px; color:#666;">${isSt ? `停車：<b>${p1.name}</b>` : `前駅：${p1.name}`}<br>次駅：<b>${p2.name}</b> ${n.time}</div></div></div>`;
+                            if (popupDiv) popupDiv.parentElement.innerHTML = `<div id="popup-dynamic-content" style="display:flex; align-items:center; min-width:140px; font-family:sans-serif;"><div style="width:4px; height:40px; background:${info.color}; margin-right:12px; border-radius:2px;"></div><div><div style="font-weight:bold; font-size:14px; color:#333;">${info.name}</div><div style="font-size:11px; margin-top:3px; color:#666;">${isSt ? `停車：<b>${p1.name}</b>` : `前駅：${p1.name}`}<br>次駅：<b>${p2.name}</b> ${n.time}</div></div></div>`;
                             const dot = document.getElementById('pulsating-dot'), line = document.getElementById('progress-line');
                             if (dot && line) { const top = (i * 45) + (pct * 45) + 32; dot.style.top = `${top-6}px`; line.style.height = `${top-32}px`; dot.style.display = 'block'; }
                         }
-                        trainFeats.push({ type: 'Feature', properties: { tid, color: info.color, h_base: hBaseLayer + curAlt, h_top: hBaseLayer + curAlt + (CONFIG.TRAIN.HEIGHT * scale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
+                        trainFeats.push({ type: 'Feature', properties: { tid, color: info.color, h_base: hBaseLayer + curAlt, h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * scale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
                         break;
                     }
                 }
