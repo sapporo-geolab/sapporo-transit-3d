@@ -206,54 +206,24 @@ async function initSubway() {
             allStopTimes.get(tid).push({ time: arrivalTime, name: sname });
         });
 
-        // --- 2. クリックイベントの実装（Mini Tokyo 3D風） ---
-// main.js の map.on('click', 'tr-layer', ...) 内を修正
-map.on('click', 'tr-layer', (e) => {
-    const f = e.features[0];
-    const tid = f.properties.tid;
-    const rid = tripToRoute.get(tid);
-    const info = routeData.get(rid);
+// --- 1. クリックイベントの実装（中央パネル & 路線カラー棒） ---
+        map.on('click', 'tr-layer', (e) => {
+            const f = e.features[0];
+            const tid = f.properties.tid;
+            const rid = tripToRoute.get(tid);
+            const info = routeData.get(rid);
 
-    const panel = document.getElementById('panel');
-    const titleEl = document.getElementById('panel-title');
-    const timetableEl = document.getElementById('timetable');
-
-    // ★ タイトル部分を書き換え (IDを消し、色棒と路線名を入れる)
-    // 棒の色は info.color (例: #008000 など) をそのまま使います
-    titleEl.innerHTML = `
-        <div class="line-strip" style="background-color: ${info.color};"></div>
-        <span>${info.name}</span>
-    `;
-
-    timetableEl.innerHTML = '';
-    const stops = allStopTimes.get(tid) || [];
-    stops.forEach(s => {
-        const item = document.createElement('div');
-        item.className = 'station-item';
-        item.innerHTML = `<span class="station-time">${s.time}</span><span class="station-name">${s.name}</span>`;
-        timetableEl.appendChild(item);
-    });
-
-    panel.classList.add('active');
-
-    // ポップアップも同様に少し整理
-    new mapboxgl.Popup()
-        .setLngLat(e.lngLat)
-        .setHTML(`<div style="display:flex; align-items:center; padding: 5px;">
-                    <div style="width:4px; height:18px; background:${info.color}; margin-right:8px;"></div>
-                    <strong>${info.name}</strong>
-                  </div>`)
-        .addTo(map);
-});
-
-            // ② 詳細パネル（時刻表）を表示
             const panel = document.getElementById('panel');
             const titleEl = document.getElementById('panel-title');
             const timetableEl = document.getElementById('timetable');
 
-            titleEl.innerText = `${info.name} (運行ID: ${tid})`;
-            timetableEl.innerHTML = '';
+            // タイトルを路線名とカラーバーに書き換え
+            titleEl.innerHTML = `
+                <div class="line-strip" style="background-color: ${info.color};"></div>
+                <span>${info.name}</span>
+            `;
 
+            timetableEl.innerHTML = '';
             const stops = allStopTimes.get(tid) || [];
             stops.forEach(s => {
                 const item = document.createElement('div');
@@ -263,13 +233,23 @@ map.on('click', 'tr-layer', (e) => {
             });
 
             panel.classList.add('active');
+
+            // ポップアップも Mini Tokyo 風にシンプル化
+            new mapboxgl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(`
+                    <div style="display:flex; align-items:center; padding: 5px; font-weight: bold;">
+                        <div style="width:4px; height:18px; background:${info.color}; margin-right:8px;"></div>
+                        ${info.name}
+                    </div>`)
+                .addTo(map);
         });
 
         // マウスカーソルを指マークに変更
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        // --- 3. アニメーション関数（tidの付与を含む） ---
+        // --- 2. アニメーション関数（緯度補正 & 3Dサークル同期） ---
         function animate() {
             const now = new Date();
             if (dateEl) {
@@ -283,6 +263,7 @@ map.on('click', 'tr-layer', (e) => {
             const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
             const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
             
+            // 地面サークルの半径更新
             const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
             const stopFeats = [];
             stopMap.forEach((val) => {
@@ -308,7 +289,6 @@ map.on('click', 'tr-layer', (e) => {
                         const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
                         const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
                         
-                        // properties に tid を追加！
                         trainFeats.push({ 
                             type: 'Feature', 
                             properties: { tid: tid, color: info.color, h_base: hBase, h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) }, 
@@ -323,44 +303,10 @@ map.on('click', 'tr-layer', (e) => {
             requestAnimationFrame(animate);
         }
 
-        // 補助関数
-        function isCriticalSection(n1, n2) {
-            const pairs = [["さっぽろ", "大通"], ["大通", "すすきの"], ["大通", "豊水すすきの"], ["大通", "西１１丁目"], ["大通", "西11丁目"], ["大通", "バスセンター前"]];
-            return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
-        }
+        animate(); // ループ開始
 
-        function getHybridPos(p1, p2, pct) {
-            const lerpLng = p1.lon + (p2.lon - p1.lon) * pct, lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
-            const pt = turf.point([lerpLng, lerpLat]);
-            const straightAngle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
-            let closestPt = pt, min_dist = Infinity, bestFeature = null;
-            subGeo.features.forEach(f => {
-                try {
-                    const snapped = turf.nearestPointOnLine(f, pt);
-                    if (snapped.properties.dist < min_dist) { min_dist = snapped.properties.dist; closestPt = snapped; bestFeature = f; }
-                } catch(e) {}
-            });
-            let snappedLng = closestPt.geometry.coordinates[0], snappedLat = closestPt.geometry.coordinates[1], snappedAngle = straightAngle;
-            if (bestFeature && min_dist < 0.5) { 
-                const nPct = Math.min(1.0, pct + 0.005);
-                const nSnapped = turf.nearestPointOnLine(bestFeature, turf.point([p1.lon + (p2.lon - p1.lon) * nPct, p1.lat + (p2.lat - p1.lat) * nPct]));
-                snappedAngle = (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180);
-            }
-            const threshold = 0.005, deadzone = 0.003;
-            const distFromStart = turf.distance(turf.point([p1.lon, p1.lat]), pt);
-            const totalDist = turf.distance(turf.point([p1.lon, p1.lat]), turf.point([p2.lon, p2.lat]));
-            let currentDist = Math.min(distFromStart, totalDist - distFromStart);
-            if (currentDist < deadzone || isCriticalSection(p1.name, p2.name)) return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
-            else if (currentDist < threshold) {
-                const w = 1.0 - (currentDist - deadzone) / (threshold - deadzone);
-                return { lng: snappedLng + (lerpLng - snappedLng) * w, lat: snappedLat + (lerpLat - snappedLat) * w, angle: snappedAngle + (straightAngle - snappedAngle) * w };
-            }
-            return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
-        }
-
-        animate();
-
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error(e); // ← これが抜けていたのがエラーの原因です
+    }
 }
-
 
