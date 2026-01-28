@@ -99,7 +99,6 @@ map.addLayer({
 });
 
 async function initSubway() {
-    // 日付を表示する要素を追加で取得
     const dateEl = document.getElementById('date'); 
     const clockEl = document.getElementById('clock');
     const trainCountEl = document.getElementById('train-count');
@@ -121,10 +120,7 @@ async function initSubway() {
             const sid = c[0].trim(), sname = c[1].trim();
             const lon = parseFloat(c[3]), lat = parseFloat(c[2]);
             stopMap.set(sid, { lon, lat, name: sname });
-            stopFeatures.push({
-                type: 'Feature', properties: { name: sname },
-                geometry: { type: 'Point', coordinates: [lon, lat] }
-            });
+            stopFeatures.push({ type: 'Feature', properties: { name: sname }, geometry: { type: 'Point', coordinates: [lon, lat] } });
         });
 
         const routeData = new Map();
@@ -140,28 +136,58 @@ async function initSubway() {
             if (c.length >= 3) tripToRoute.set(c[2].trim(), c[0].trim());
         });
 
-        // 路線の描画（空中都市を際立たせるため、少し光るような設定に）
+        // --- ★ 修正ポイント1: 先に全ての Source (データ) を登録する ---
         map.addSource('rail', { type: 'geojson', data: subGeo });
+        map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: stopFeatures } });
+        map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+        // --- ★ 修正ポイント2: その後に Layer (見た目) を追加する ---
+        
+        // 路線
         map.addLayer({ 'id': 'rail-line', 'type': 'line', 'source': 'rail', 'paint': { 'line-color': ['get', 'colour'], 'line-width': 3, 'line-opacity': 0.6 } });
         
-     // 駅の3Dサークル（地面に張り付く薄い円柱）
-map.addLayer({
-    'id': 'stop-circles-3d',
-    'type': 'fill-extrusion',
-    'source': 'stops-source',
-    'paint': {
-        // Mini Tokyo 3D風の薄いグレー。透過させて線路を見せる
-        'fill-extrusion-color': '#cccccc',
-        'fill-extrusion-base': 0,
-        'fill-extrusion-height': 0.1, // 地面に張り付く薄さ
-        'fill-extrusion-opacity': 0.5
-    }
-});
-        map.addLayer({ 'id': 'stop-labels', 'type': 'symbol', 'source': 'stops-source', 'layout': { 'text-field': ['get', 'name'], 'text-size': 11, 'text-offset': [0, 1.5], 'text-anchor': 'top' }, 'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } });
+        // 駅の3D円盤（地面に張り付く）
+        map.addLayer({
+            'id': 'stop-circles-3d',
+            'type': 'fill-extrusion',
+            'source': 'stops-source',
+            'paint': {
+                'fill-extrusion-color': '#cccccc',
+                'fill-extrusion-base': 0,
+                'fill-extrusion-height': 0.1,
+                'fill-extrusion-opacity': 0.5
+            }
+        });
 
-        map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        // 駅の黒い縁取り
+        map.addLayer({
+            'id': 'stop-circles-outline',
+            'type': 'line',
+            'source': 'stops-source',
+            'paint': {
+                'line-color': '#000000',
+                'line-width': 2
+            }
+        });
+
+        // 駅名ラベル
+        map.addLayer({ 
+            'id': 'stop-labels', 
+            'type': 'symbol', 
+            'source': 'stops-source', 
+            'layout': { 
+                'text-field': ['get', 'name'], 
+                'text-size': 11, 
+                'text-offset': [0, 1.5], 
+                'text-anchor': 'top' 
+            }, 
+            'paint': { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 } 
+        });
+
+        // 電車
         map.addLayer({ 'id': 'tr-layer', 'type': 'fill-extrusion', 'source': 'trains', 'paint': { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-height': ['get', 'h_top'], 'fill-extrusion-base': ['get', 'h_base'], 'fill-extrusion-opacity': 1.0 } });
 
+        // --- 運行データ処理とアニメーション（以下、前回と同じ） ---
         const activeTrips = new Map();
         const targetDay = (new Date().getDay() === 0 || new Date().getDay() === 6) ? "土休日" : "平日";
         stT.split('\n').forEach(line => {
@@ -178,74 +204,83 @@ map.addLayer({
             return pairs.some(p => (n1.includes(p[0]) && n2.includes(p[1])) || (n1.includes(p[1]) && n2.includes(p[0])));
         }
 
-function getHybridPos(p1, p2, pct) {
-    const lerpLng = p1.lon + (p2.lon - p1.lon) * pct;
-    const lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
-    const pt = turf.point([lerpLng, lerpLat]);
-    const straightAngle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
-    
-    const distFromStart = turf.distance(turf.point([p1.lon, p1.lat]), pt);
-    const totalDist = turf.distance(turf.point([p1.lon, p1.lat]), turf.point([p2.lon, p2.lat]));
-
-    // --- 1. まず線路上の「スナップ座標」と「角度」を取得する ---
-    let closestPt = pt, min_dist = Infinity, bestFeature = null;
-    subGeo.features.forEach(f => {
-        try {
-            const snapped = turf.nearestPointOnLine(f, pt);
-            if (snapped.properties.dist < min_dist) { 
-                min_dist = snapped.properties.dist; 
-                closestPt = snapped; 
-                bestFeature = f; 
+        function getHybridPos(p1, p2, pct) {
+            const lerpLng = p1.lon + (p2.lon - p1.lon) * pct, lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
+            const pt = turf.point([lerpLng, lerpLat]);
+            const straightAngle = Math.atan2(p2.lat - p1.lat, p2.lon - p1.lon);
+            let closestPt = pt, min_dist = Infinity, bestFeature = null;
+            subGeo.features.forEach(f => {
+                try {
+                    const snapped = turf.nearestPointOnLine(f, pt);
+                    if (snapped.properties.dist < min_dist) { min_dist = snapped.properties.dist; closestPt = snapped; bestFeature = f; }
+                } catch(e) {}
+            });
+            let snappedLng = closestPt.geometry.coordinates[0], snappedLat = closestPt.geometry.coordinates[1], snappedAngle = straightAngle;
+            if (bestFeature && min_dist < 0.5) { 
+                const nPct = Math.min(1.0, pct + 0.005);
+                const nSnapped = turf.nearestPointOnLine(bestFeature, turf.point([p1.lon + (p2.lon - p1.lon) * nPct, p1.lat + (p2.lat - p1.lat) * nPct]));
+                snappedAngle = (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180);
             }
-        } catch(e) {}
-    });
+            const threshold = 0.005, deadzone = 0.003;
+            const distFromStart = turf.distance(turf.point([p1.lon, p1.lat]), pt);
+            const totalDist = turf.distance(turf.point([p1.lon, p1.lat]), turf.point([p2.lon, p2.lat]));
+            let currentDist = Math.min(distFromStart, totalDist - distFromStart);
+            if (currentDist < deadzone || isCriticalSection(p1.name, p2.name)) return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
+            else if (currentDist < threshold) {
+                const w = 1.0 - (currentDist - deadzone) / (threshold - deadzone);
+                return { lng: snappedLng + (lerpLng - snappedLng) * w, lat: snappedLat + (lerpLat - snappedLat) * w, angle: snappedAngle + (straightAngle - snappedAngle) * w };
+            }
+            return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
+        }
 
-    let snappedLng = closestPt.geometry.coordinates[0];
-    let snappedLat = closestPt.geometry.coordinates[1];
-    let snappedAngle = straightAngle; // デフォルト
+        function animate() {
+            const now = new Date();
+            if (dateEl) {
+                const y = now.getFullYear(), m = now.getMonth() + 1, d = now.getDate(), w = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
+                dateEl.innerText = `${y}年${m}月${d}日(${w})`; 
+            }
+            clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
+            const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
+            
+            const z = map.getZoom(), center = map.getCenter();
+            const latCorrection = 1 / Math.cos(center.lat * Math.PI / 180);
+            const scale = Math.min(15.0, Math.pow(2.2, Math.max(0, 16.0 - z))); 
+            
+            // サークルの半径更新（駅名プロパティ付き）
+            const circleRadiusMeters = (CONFIG.TRAIN.LENGTH * scale) * 111320 * 1.5; 
+            const stopFeats = [];
+            stopMap.forEach((val) => {
+                const circle = turf.circle([val.lon, val.lat], circleRadiusMeters, { units: 'meters', steps: 32, properties: { name: val.name } });
+                stopFeats.push(circle);
+            });
+            if (map.getSource('stops-source')) map.getSource('stops-source').setData({ type: 'FeatureCollection', features: stopFeats });
 
-    if (bestFeature && min_dist < 0.5) { 
-        const nPct = Math.min(1.0, pct + 0.005);
-        const nSnapped = turf.nearestPointOnLine(bestFeature, turf.point([p1.lon + (p2.lon - p1.lon) * nPct, p1.lat + (p2.lat - p1.lat) * nPct]));
-        snappedAngle = (90 - turf.bearing(closestPt, nSnapped)) * (Math.PI / 180);
-    }
-
-    // --- 2. 駅付近での「滑らかな合成」ロジック ---
-    const threshold = 0.005; // 5m手前から合成開始
-    const deadzone = 0.003;  // 3m以内は完全に直線
-
-    let currentDist = Math.min(distFromStart, totalDist - distFromStart);
-
-    if (currentDist < deadzone || isCriticalSection(p1.name, p2.name)) {
-        // 3m以内は完全な直線補正
-        return { lng: lerpLng, lat: lerpLat, angle: straightAngle };
-    } else if (currentDist < threshold) {
-        // 3mから5mの間で、線路の動き(w=0)から直線の動き(w=1)へ徐々に移行
-        const w = 1.0 - (currentDist - deadzone) / (threshold - deadzone);
-        return {
-            lng: snappedLng + (lerpLng - snappedLng) * w,
-            lat: snappedLat + (lerpLat - snappedLat) * w,
-            angle: snappedAngle + (straightAngle - snappedAngle) * w
-        };
-    }
-
-    // それ以外（駅間）は通常の線路スナップ
-    return { lng: snappedLng, lat: snappedLat, angle: snappedAngle };
+            const hScale = scale, L = CONFIG.TRAIN.LENGTH * scale, W = CONFIG.TRAIN.WIDTH * scale;
+            const trainFeats = [];
+            activeTrips.forEach((stops, tid) => {
+                const rid = tripToRoute.get(tid), info = routeData.get(rid);
+                if (!info) return;
+                let hBase = info.name.includes("南北線") ? 7 : (info.name.includes("東西線") ? 4 : 1);
+                for (let i = 0; i < stops.length - 1; i++) {
+                    const c = stops[i], n = stops[i+1];
+                    if (s >= c.sec && s < n.sec) {
+                        const p1 = stopMap.get(c.sid), p2 = stopMap.get(n.sid);
+                        if (!p1 || !p2) continue;
+                        const pos = getHybridPos(p1, p2, Math.min(1.0, (s - c.sec) / Math.max(1, (n.sec - c.sec) - CONFIG.TRAIN.STOP_DURATION)));
+                        const cA = Math.cos(pos.angle), sA = Math.sin(pos.angle);
+                        const corners = [[-L,-W],[L,-W],[L,W],[-L,W],[-L,-W]].map(p => [pos.lng + (p[0] * cA - p[1] * sA) * latCorrection, pos.lat + (p[0] * sA + p[1] * cA)]);
+                        trainFeats.push({ type: 'Feature', properties: { color: info.color, h_base: hBase, h_top: hBase + (CONFIG.TRAIN.HEIGHT * hScale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
+                        break;
+                    }
+                }
+            });
+            if (map.getSource('trains')) map.getSource('trains').setData({ type: 'FeatureCollection', features: trainFeats });
+            trainCountEl.innerText = `${trainFeats.length} trains running`;
+            requestAnimationFrame(animate);
+        }
+        animate();
+    } catch (e) { console.error(e); }
 }
-        
-function animate() {
-    const now = new Date();
-    
-    // --- 1. 日付の表示ロジック（形式を画像に合わせて修正） ---
-    const dateEl = document.getElementById('date'); 
-    if (dateEl) {
-        const y = now.getFullYear();
-        const m = now.getMonth() + 1;
-        const d = now.getDate();
-        const w = ["日", "月", "火", "水", "木", "金", "土"][now.getDay()];
-        // 日本語形式に変更: 例 2026年1月27日(火)
-        dateEl.innerText = `${y}年${m}月${d}日(${w})`; 
-    }
 
     const s = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds() + (now.getMilliseconds() / 1000);
     clockEl.innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
@@ -328,6 +363,7 @@ const W = CONFIG.TRAIN.WIDTH * scale;
 animate();
     } catch (e) { console.error(e); }
 } // ← ここを閉じ忘れていたのがエラーの原因でした
+
 
 
 
