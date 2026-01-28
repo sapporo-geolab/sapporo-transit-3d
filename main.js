@@ -68,20 +68,19 @@ async function initSubway() {
         map.addSource('stops-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-        // --- 1本に統合された3D線路リボン ---
+        // --- 1本に統合された3Dリボン線路の生成ロジック ---
         const shelterFeatures = [];
-        // 同一経路の重複描画を防ぐため軌跡を記録
-        const drawnLines = new Set();
+        const drawnPaths = new Set(); // 重複排除用
 
         subGeo.features.forEach(feature => {
             if (feature.geometry.type !== "LineString") return;
             const props = feature.properties;
-            
-            // 識別用のユニークキー（色と始点・終点）
             const coords = feature.geometry.coordinates;
-            const lineKey = `${props.colour}-${coords[0][0]}-${coords[coords.length-1][0]}`;
-            if (drawnLines.has(lineKey)) return;
-            drawnLines.add(lineKey);
+
+            // 始点と終点の経度でパスを識別し、重複（上下線）を1本にする
+            const pathId = `${coords[0][0].toFixed(4)}-${coords[coords.length-1][0].toFixed(4)}`;
+            if (drawnPaths.has(pathId)) return;
+            drawnPaths.add(pathId);
 
             let sColor = "#666666";
             if (props.name?.includes("東西線") || props.colour?.toLowerCase() === "#ff8c00") sColor = "#FF8C00";
@@ -100,7 +99,7 @@ async function initSubway() {
                     return 0;
                 };
                 const midAlt = (getAlt(start) + getAlt(end)) / 2;
-                // 車幅(CONFIG.TRAIN.WIDTH)より少し狭い幅(約3.5m)に設定
+                // 車幅より少し狭い幅(約3.5m)
                 const offsetL = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), 0.0012, {units: 'kilometers'});
                 const offsetR = turf.lineOffset(turf.lineString([start.geometry.coordinates, end.geometry.coordinates]), -0.0012, {units: 'kilometers'});
                 const polygonCoords = [offsetL.geometry.coordinates[0], offsetL.geometry.coordinates[1], offsetR.geometry.coordinates[1], offsetR.geometry.coordinates[0], offsetL.geometry.coordinates[0]];
@@ -155,12 +154,11 @@ async function initSubway() {
         map.on('mouseenter', 'tr-layer', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tr-layer', () => map.getCanvas().style.cursor = '');
 
-        // 吸着とセンター走行の両立
+        // 吸着走行：線路に沿って動くロジック
         function getHybridPos(p1, p2, pct) {
             const lerpLng = p1.lon + (p2.lon - p1.lon) * pct, lerpLat = p1.lat + (p2.lat - p1.lat) * pct;
             const pt = turf.point([lerpLng, lerpLat]);
-            let closestPt = pt;
-            let min_dist = Infinity;
+            let closestPt = pt, min_dist = Infinity;
             subGeo.features.forEach(f => {
                 try {
                     const snapped = turf.nearestPointOnLine(f, pt);
@@ -207,7 +205,7 @@ async function initSubway() {
                             const dot = document.getElementById('pulsating-dot'), line = document.getElementById('progress-line');
                             if (dot && line) { const top = (i * 45) + (pct * 45) + 32; dot.style.top = `${top-6}px`; line.style.height = `${top-32}px`; dot.style.display = 'block'; }
                         }
-                        trainFeats.push({ type: 'Feature', properties: { tid, color: info.color, h_base: hBaseLayer + curAlt, h_top: hBaseLayer + curAlt + (CONFIG.TRAIN.HEIGHT * scale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
+                        trainFeats.push({ type: 'Feature', properties: { tid, color: info.color, h_base: hBaseLayer + curAlt, h_top: hBaseLayer + currentAlt + (CONFIG.TRAIN.HEIGHT * scale) }, geometry: { type: 'Polygon', coordinates: [corners] } });
                         break;
                     }
                 }
